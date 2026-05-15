@@ -1,0 +1,87 @@
+<view class="page">
+  <navigation-bar title="族谱树" back="{{false}}" color="black" background="#f7f3ef" />
+
+  <!-- 搜索栏 -->
+  <view class="toolbar">
+    <view class="search-box">
+      <text class="search-icon">🔍</text>
+      <input
+        class="search-input"
+        placeholder="搜索成员姓名…"
+        value="{{keyword}}"
+        bindinput="onSearch"
+      />
+    </view>
+  </view>
+
+  <!-- 家族过滤 chips -->
+  <scroll-view class="family-filter" scroll-x>
+    <view class="family-filter-inner">
+      <view
+        wx:for="{{familyFilters}}"
+        wx:key="name"
+        class="family-chip {{item.active ? 'family-chip--active' : ''}}"
+        style="{{item.active ? 'background:' + item.color + '20; border-color:' + item.color + '; color:' + item.color : ''}}"
+        bindtap="toggleFamily"
+        data-name="{{item.name}}"
+      >
+        <text>{{item.name}}</text>
+      </view>
+    </view>
+  </scroll-view>
+
+  <!-- 树图区域：双向滚动 -->
+  <scroll-view
+    class="tree-scroll"
+    scroll-x
+    scroll-y
+    enhanced
+    show-scrollbar="{{false}}"
+  >
+    <view
+      class="tree-canvas-wrap"
+      style="width: {{canvasWidth}}rpx; height: {{canvasHeight}}rpx;"
+    >
+      <!-- Canvas 连接线层 -->
+      <canvas
+        id="tree-canvas"
+        type="2d"
+        class="tree-canvas"
+        style="width: {{canvasWidth / 2}}px; height: {{canvasHeight / 2}}px;"
+      />
+
+      <!-- 成员卡片层 -->
+      <view
+        wx:for="{{cards}}"
+        wx:key="id"
+        class="tree-card {{cards[index].isMe ? 'tree-card--me' : ''}}"
+        style="left: {{item.left}}rpx; top: {{item.top}}rpx; border-color: {{item.isMe ? '#d4756a' : item.color}}; background: linear-gradient(145deg, {{item.color}}18, #ffffff);"
+        bindtap="onCardTap"
+        data-json="{{item.memberJson}}"
+      >
+        <view wx:if="{{item.isMe}}" class="tree-card-me-badge"><text>我</text></view>
+        <view class="tree-card-avatar" style="background: {{item.color}}20;">
+          <text class="tree-card-emoji">{{item.avatarEmoji}}</text>
+        </view>
+        <text class="tree-card-name">{{item.name}}</text>
+        <text class="tree-card-relation">{{item.relation}}</text>
+        <text class="tree-card-age">{{item.age !== null ? item.age + '岁' : '-'}}</text>
+        <view class="tree-card-family" style="background: {{item.color}}15; color: {{item.color}};">
+          <text>{{item.familyName}}</text>
+        </view>
+      </view>
+    </view>
+  </scroll-view>
+
+  <!-- 图例 -->
+  <scroll-view class="legend" scroll-x>
+    <view class="legend-inner">
+      <view wx:for="{{legendItems}}" wx:key="name" class="legend-item">
+        <view class="legend-dot" style="background: {{item.color}};" />
+        <text class="legend-name">{{item.name}}</text>
+      </view>
+    </view>
+  </scroll-view>
+</view>
+
+<member-modal show="{{showModal}}" memberJson="{{selectedMemberJson}}" bind:close="onModalClose" />

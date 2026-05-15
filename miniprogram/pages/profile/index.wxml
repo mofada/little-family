@@ -1,0 +1,195 @@
+<view class="page">
+<navigation-bar title="我的" back="{{false}}" color="black" background="#f7f3ef" />
+
+<scroll-view class="page__list" scroll-y type="list" enhanced show-scrollbar="{{false}}">
+
+  <!-- 个人英雄区域 -->
+  <view wx:if="{{me}}" class="hero" style="background: linear-gradient(135deg, {{me.color}}15, {{me.color}}05);">
+    <view class="hero-avatar" style="background: #dbeafe;">
+      <text class="hero-avatar-emoji">👨</text>
+    </view>
+    <view class="hero-info">
+      <view class="hero-name-row">
+        <text class="hero-name">{{me.name}}</text>
+        <view class="me-badge"><text>我</text></view>
+      </view>
+      <text class="hero-relation">{{me.relation}}</text>
+      <view class="hero-tags">
+        <view class="hero-tag" style="background: {{me.color}}20; color: {{me.color}};">
+          <text>{{me.familyName}}</text>
+        </view>
+        <view class="hero-tag hero-tag--gen">
+          <text>第{{me.age}}岁</text>
+        </view>
+      </view>
+    </view>
+    <view class="hero-birthday" bindtap="onMemberTap" data-json="{{me.memberJson}}">
+      <text class="hero-birthday-icon">🎂</text>
+      <text class="hero-birthday-label">{{me.birthdayType === 'lunar' ? '农历' : '阳历'}}{{me.birthMonth}}月{{me.birthDay}}日</text>
+      <text class="hero-birthday-days">还剩 {{me.daysUntilBirthday}} 天</text>
+    </view>
+  </view>
+
+  <!-- 直系家庭 -->
+  <view class="section">
+    <view class="section-title-row">
+      <text class="section-title">👨‍👩‍👧‍👦 直系家庭</text>
+    </view>
+
+    <view wx:if="{{parents.length > 0}}" class="family-group">
+      <text class="family-group-label">父母</text>
+      <view class="relative-row">
+        <view
+          wx:for="{{parents}}"
+          wx:key="id"
+          class="relative-card"
+          style="border-color: {{item.color}};"
+          bindtap="onMemberTap"
+          data-json="{{item.memberJson}}"
+        >
+          <text class="relative-avatar">{{item.gender === 'male' ? '👨' : '👩'}}</text>
+          <text class="relative-name">{{item.name}}</text>
+          <text class="relative-relation">{{item.relation}}</text>
+        </view>
+      </view>
+    </view>
+
+    <view wx:if="{{spouse}}" class="family-group">
+      <text class="family-group-label">配偶</text>
+      <view class="relative-row">
+        <view
+          class="relative-card"
+          style="border-color: {{spouse.color}};"
+          bindtap="onMemberTap"
+          data-json="{{spouse.memberJson}}"
+        >
+          <text class="relative-avatar">{{spouse.gender === 'male' ? '👨' : '👩'}}</text>
+          <text class="relative-name">{{spouse.name}}</text>
+          <text class="relative-relation">{{spouse.relation}}</text>
+        </view>
+      </view>
+    </view>
+
+    <view wx:if="{{siblings.length > 0}}" class="family-group">
+      <text class="family-group-label">兄弟姐妹</text>
+      <view class="relative-row">
+        <view
+          wx:for="{{siblings}}"
+          wx:key="id"
+          class="relative-card"
+          style="border-color: {{item.color}};"
+          bindtap="onMemberTap"
+          data-json="{{item.memberJson}}"
+        >
+          <text class="relative-avatar">{{item.gender === 'male' ? '👨' : '👩'}}</text>
+          <text class="relative-name">{{item.name}}</text>
+          <text class="relative-relation">{{item.relation}}</text>
+        </view>
+      </view>
+    </view>
+
+    <view wx:if="{{children.length > 0}}" class="family-group">
+      <text class="family-group-label">子女</text>
+      <view class="relative-row">
+        <view
+          wx:for="{{children}}"
+          wx:key="id"
+          class="relative-card"
+          style="border-color: {{item.color}};"
+          bindtap="onMemberTap"
+          data-json="{{item.memberJson}}"
+        >
+          <text class="relative-avatar">{{item.gender === 'male' ? '👨' : '👩'}}</text>
+          <text class="relative-name">{{item.name}}</text>
+          <text class="relative-relation">{{item.relation}}</text>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <!-- 关系路径查询 -->
+  <view class="section">
+    <view class="section-title-row">
+      <text class="section-title">🔗 关系路径查询</text>
+    </view>
+    <view class="path-pickers">
+      <view class="picker-group">
+        <text class="picker-label">从</text>
+        <picker
+          mode="selector"
+          range="{{memberOptions}}"
+          range-key="name"
+          value="{{fromMemberIdx}}"
+          bindchange="onFromChange"
+        >
+          <view class="picker-value">
+            <text>{{fromMemberIdx >= 0 ? memberOptions[fromMemberIdx].name : '选择成员'}}</text>
+            <text class="picker-arrow">▼</text>
+          </view>
+        </picker>
+      </view>
+      <text class="path-arrow">→</text>
+      <view class="picker-group">
+        <text class="picker-label">到</text>
+        <picker
+          mode="selector"
+          range="{{memberOptions}}"
+          range-key="name"
+          value="{{toMemberIdx}}"
+          bindchange="onToChange"
+        >
+          <view class="picker-value">
+            <text>{{toMemberIdx >= 0 ? memberOptions[toMemberIdx].name : '选择成员'}}</text>
+            <text class="picker-arrow">▼</text>
+          </view>
+        </picker>
+      </view>
+    </view>
+    <view class="find-path-btn" bindtap="findPath">
+      <text>查询关系路径</text>
+    </view>
+
+    <view wx:if="{{pathSearched}}" class="path-result">
+      <view wx:if="{{pathFound}}" class="path-chain">
+        <view
+          wx:for="{{relationPath}}"
+          wx:key="index"
+          class="path-step"
+        >
+          <view class="path-node" style="background: {{item.color}}20; border-color: {{item.color}};">
+            <text class="path-node-name">{{item.name}}</text>
+            <text class="path-node-relation">{{item.relation}}</text>
+          </view>
+          <text wx:if="{{index < relationPath.length - 1}}" class="path-connector">→</text>
+        </view>
+      </view>
+      <view wx:else class="path-empty">
+        <text>未找到关系路径</text>
+      </view>
+    </view>
+  </view>
+
+  <!-- 家族概览 -->
+  <view class="section">
+    <view class="section-title-row">
+      <text class="section-title">🌿 家族概览</text>
+      <text class="section-sub">共 {{statsTotal}} 人 · {{statsFamilies}} 个家族</text>
+    </view>
+    <view class="branch-grid">
+      <view
+        wx:for="{{statsBranches}}"
+        wx:key="name"
+        class="branch-card"
+        style="border-color: {{item.color}}; background: {{item.color}}08;"
+      >
+        <view class="branch-dot" style="background: {{item.color}};" />
+        <text class="branch-name">{{item.name}}</text>
+        <text class="branch-count">{{item.count}}人</text>
+      </view>
+    </view>
+  </view>
+
+</scroll-view>
+
+<member-modal show="{{showModal}}" memberJson="{{selectedMemberJson}}" bind:close="onModalClose" />
+</view>

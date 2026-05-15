@@ -1,0 +1,56 @@
+{
+  "pages": [
+    "pages/home/index",
+    "pages/tree/index",
+    "pages/birthday/index",
+    "pages/timeline/index",
+    "pages/profile/index"
+  ],
+  "tabBar": {
+    "color": "#9b7b74",
+    "selectedColor": "#d4756a",
+    "backgroundColor": "#ffffff",
+    "borderStyle": "white",
+    "list": [
+      {
+        "pagePath": "pages/home/index",
+        "text": "首页",
+        "iconPath": "assets/tabbar/home.png",
+        "selectedIconPath": "assets/tabbar/home-active.png"
+      },
+      {
+        "pagePath": "pages/tree/index",
+        "text": "图谱",
+        "iconPath": "assets/tabbar/tree.png",
+        "selectedIconPath": "assets/tabbar/tree-active.png"
+      },
+      {
+        "pagePath": "pages/birthday/index",
+        "text": "生日",
+        "iconPath": "assets/tabbar/birthday.png",
+        "selectedIconPath": "assets/tabbar/birthday-active.png"
+      },
+      {
+        "pagePath": "pages/timeline/index",
+        "text": "时间轴",
+        "iconPath": "assets/tabbar/timeline.png",
+        "selectedIconPath": "assets/tabbar/timeline-active.png"
+      },
+      {
+        "pagePath": "pages/profile/index",
+        "text": "我的",
+        "iconPath": "assets/tabbar/profile.png",
+        "selectedIconPath": "assets/tabbar/profile-active.png"
+      }
+    ]
+  },
+  "window": {
+    "navigationBarTextStyle": "black",
+    "navigationStyle": "custom",
+    "backgroundColor": "#f7f3ef"
+  },
+  "style": "v2",
+  "componentFramework": "glass-easel",
+  "sitemapLocation": "sitemap.json",
+  "lazyCodeLoading": "requiredComponents"
+}

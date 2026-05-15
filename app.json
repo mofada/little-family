@@ -1,0 +1,40 @@
+{
+  "pages": [
+    "pages/home/index",
+    "pages/tree/index",
+    "pages/birthday/index",
+    "pages/timeline/index",
+    "pages/profile/index"
+  ],
+  "tabBar": {
+    "custom": true,
+    "color": "#9b7b74",
+    "selectedColor": "#d4756a",
+    "backgroundColor": "#ffffff",
+    "borderStyle": "white",
+    "list": [
+      {"pagePath": "pages/home/index", "text": "首页"},
+      {"pagePath": "pages/tree/index", "text": "图谱"},
+      {"pagePath": "pages/birthday/index", "text": "生日"},
+      {"pagePath": "pages/timeline/index", "text": "时间轴"},
+      {"pagePath": "pages/profile/index", "text": "我的"}
+    ]
+  },
+  "window": {
+    "navigationBarTextStyle": "black",
+    "navigationStyle": "custom",
+    "backgroundColor": "#f7f3ef"
+  },
+  "style": "v2",
+  "rendererOptions": {
+    "skyline": {
+      "defaultDisplayBlock": true,
+      "disableABTest": true,
+      "sdkVersionBegin": "3.0.0",
+      "sdkVersionEnd": "15.255.255"
+    }
+  },
+  "componentFramework": "glass-easel",
+  "sitemapLocation": "sitemap.json",
+  "lazyCodeLoading": "requiredComponents"
+}

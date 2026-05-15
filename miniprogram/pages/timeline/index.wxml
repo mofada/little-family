@@ -1,0 +1,75 @@
+<view class="page">
+<navigation-bar title="时间轴" back="{{false}}" color="black" background="#f7f3ef" />
+
+<scroll-view class="page__list" scroll-y type="list" enhanced show-scrollbar="{{false}}">
+
+  <!-- Hero 统计 -->
+  <view class="hero">
+    <view class="hero-stat-row">
+      <view class="hero-stat">
+        <text class="hero-stat-value">{{totalEvents}}</text>
+        <text class="hero-stat-label">出生记录</text>
+      </view>
+      <view class="hero-stat-divider" />
+      <view class="hero-stat">
+        <text class="hero-stat-value">{{yearSpan}}</text>
+        <text class="hero-stat-label">跨越年份</text>
+      </view>
+      <view class="hero-stat-divider" />
+      <view class="hero-stat">
+        <text class="hero-stat-value">{{decadeCount}}</text>
+        <text class="hero-stat-label">跨越年代</text>
+      </view>
+    </view>
+  </view>
+
+  <!-- 时间轴主体 -->
+  <view class="timeline">
+    <view wx:for="{{decadeGroups}}" wx:key="decade" class="decade-block">
+      <!-- 年代标签 -->
+      <view class="decade-header">
+        <view class="decade-dot" />
+        <text class="decade-label">{{item.decadeLabel}}</text>
+      </view>
+
+      <!-- 事件列表 -->
+      <view class="decade-events">
+        <view
+          wx:for="{{item.events}}"
+          wx:for-item="ev"
+          wx:key="id"
+          class="event-card"
+          bindtap="onEventTap"
+          data-json="{{ev.memberJson}}"
+        >
+          <view class="event-line" style="background: {{ev.color}};" />
+          <view class="event-content">
+            <view class="event-header">
+              <view class="event-avatar" style="background: {{ev.color}}20;">
+                <text class="event-avatar-emoji">{{ev.gender === 'male' ? '👨' : '👩'}}</text>
+              </view>
+              <view class="event-info">
+                <text class="event-name">{{ev.name}}</text>
+                <text class="event-relation">{{ev.relation}}</text>
+              </view>
+              <view class="event-year-badge" style="background: {{ev.color}}15; color: {{ev.color}};">
+                <text>{{ev.birthYear}}</text>
+              </view>
+            </view>
+            <view class="event-meta">
+              <view class="event-family-tag" style="background: {{ev.color}}15; color: {{ev.color}};">
+                <text>{{ev.familyName}}</text>
+              </view>
+              <text class="event-birthday">{{ev.birthdayType === 'lunar' ? '农历' : '阳历'}}{{ev.birthMonth}}月{{ev.birthDay}}日</text>
+              <text wx:if="{{ev.age !== null}}" class="event-age">{{ev.age}}岁</text>
+            </view>
+          </view>
+        </view>
+      </view>
+    </view>
+  </view>
+
+</scroll-view>
+
+<member-modal show="{{showModal}}" memberJson="{{selectedMemberJson}}" bind:close="onModalClose" />
+</view>

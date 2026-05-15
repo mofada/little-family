@@ -1,0 +1,211 @@
+@import "../../styles/theme";
+
+.page {
+  height: 100vh;
+  background: var(--color-bg);
+  display: flex;
+  flex-direction: column;
+}
+
+.page__list {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  box-sizing: border-box;
+  padding-top: 8rpx;
+  padding-bottom: 20rpx;
+}
+
+.stats-grid {
+  display: flex;
+  flex-direction: row;
+  gap: 14rpx;
+  padding: 20rpx 28rpx 14rpx;
+}
+
+.stat-card {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 132rpx;
+  padding: 20rpx 8rpx;
+  background: #fff;
+  border-radius: 20rpx;
+  border: 1rpx solid #f2ece8;
+  box-shadow: 0 2rpx 10rpx rgba(0, 0, 0, 0.05);
+
+  &--accent {
+    background: rgba(212, 117, 106, 0.1);
+  }
+}
+
+.stat-value {
+  font-size: 44rpx;
+  font-weight: 800;
+  color: var(--color-accent);
+  line-height: 1.1;
+}
+
+.stat-label {
+  font-size: 22rpx;
+  color: var(--color-text-sub);
+  margin-top: 4rpx;
+}
+
+.section {
+  margin: 0 28rpx 20rpx;
+  background: #fff;
+  border-radius: 24rpx;
+  padding: 28rpx;
+  border: 1rpx solid #f2ece8;
+  box-shadow: 0 2rpx 14rpx rgba(0, 0, 0, 0.05);
+}
+
+.section-header {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20rpx;
+}
+
+.section-title {
+  font-size: 30rpx;
+  font-weight: 700;
+  color: var(--color-primary);
+}
+
+.section-sub {
+  font-size: 24rpx;
+  color: var(--color-text-sub);
+}
+
+.birthday-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  padding: 18rpx 0;
+  border-bottom: 1rpx solid #f0ebe6;
+
+  &:last-child {
+    border-bottom: none;
+  }
+}
+
+.today-row {
+  background: rgba(212, 117, 106, 0.05);
+  border-radius: 16rpx;
+  padding: 18rpx;
+  margin-bottom: 8rpx;
+  border-bottom: none;
+}
+
+.birthday-avatar {
+  width: 80rpx;
+  height: 80rpx;
+  border-radius: 40rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 20rpx;
+  flex-shrink: 0;
+}
+
+.birthday-avatar-emoji {
+  font-size: 36rpx;
+}
+
+.birthday-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.birthday-name {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: var(--color-primary);
+}
+
+.birthday-meta {
+  font-size: 24rpx;
+  color: var(--color-text-sub);
+  margin-top: 4rpx;
+}
+
+.copy-btn {
+  min-width: 116rpx;
+  height: 60rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 18rpx;
+  background: var(--color-accent);
+  border-radius: 9999rpx;
+  font-size: 24rpx;
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.days-badge {
+  padding: 8rpx 16rpx;
+  background: #f0ebe6;
+  border-radius: 20rpx;
+  font-size: 24rpx;
+  color: var(--color-text-sub);
+  flex-shrink: 0;
+
+  &--urgent {
+    background: rgba(249, 115, 22, 0.12);
+    color: #f97316;
+  }
+}
+
+.empty-today {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 40rpx;
+}
+
+.empty-emoji {
+  font-size: 64rpx;
+}
+.empty-text {
+  font-size: 28rpx;
+  color: var(--color-text-sub);
+  margin-top: 16rpx;
+}
+
+.nav-section {
+  margin-bottom: 0;
+}
+
+.nav-grid {
+  display: flex;
+  flex-direction: row;
+  gap: 12rpx;
+}
+
+.nav-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 28rpx 8rpx;
+  background: var(--color-bg);
+  border-radius: 18rpx;
+  border: 1rpx solid #eee7e2;
+}
+
+.nav-icon {
+  font-size: 48rpx;
+}
+.nav-label {
+  font-size: 22rpx;
+  color: var(--color-primary);
+  margin-top: 10rpx;
+  font-weight: 500;
+}
+

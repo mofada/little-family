@@ -1,0 +1,176 @@
+@import '../../styles/theme';
+
+.page {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-bg);
+}
+
+.toolbar {
+  background: #fff;
+  padding: 14rpx 28rpx;
+  box-shadow: 0 2rpx 8rpx rgba(0,0,0,.06);
+  flex-shrink: 0;
+}
+
+.search-box {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  background: var(--color-bg);
+  border-radius: 20rpx;
+  padding: 16rpx 24rpx;
+}
+
+.search-icon { font-size: 28rpx; margin-right: 12rpx; }
+
+.search-input {
+  flex: 1;
+  font-size: 28rpx;
+  color: var(--color-primary);
+}
+
+.family-filter {
+  background: #fff;
+  flex-shrink: 0;
+  border-bottom: 1rpx solid #f0ebe6;
+}
+
+.family-filter-inner {
+  display: flex;
+  flex-direction: row;
+  gap: 12rpx;
+  padding: 12rpx 20rpx 14rpx;
+  width: max-content;
+}
+
+.family-chip {
+  padding: 10rpx 24rpx;
+  border-radius: 9999rpx;
+  border: 2rpx solid #e5e7eb;
+  background: #fff;
+  font-size: 24rpx;
+  color: var(--color-text-sub);
+  flex-shrink: 0;
+
+  &--active {
+    font-weight: 600;
+    border-width: 2rpx;
+  }
+}
+
+.tree-scroll {
+  flex: 1;
+  overflow: hidden;
+}
+
+.tree-canvas-wrap {
+  position: relative;
+}
+
+.tree-canvas {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 1;
+}
+
+.tree-card {
+  position: absolute;
+  width: 176rpx;
+  min-height: 220rpx;
+  border-radius: 28rpx;
+  border-width: 5rpx;
+  border-style: solid;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 16rpx 10rpx;
+  box-sizing: border-box;
+  gap: 6rpx;
+  z-index: 2;
+
+  &--me {
+    box-shadow: 0 0 0 4rpx rgba(212,117,106,.5), 0 4rpx 16rpx rgba(0,0,0,.15);
+  }
+}
+
+.tree-card-me-badge {
+  position: absolute;
+  top: -12rpx;
+  left: -12rpx;
+  width: 32rpx;
+  height: 32rpx;
+  border-radius: 50%;
+  background: #d4756a;
+  color: #fff;
+  font-size: 16rpx;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tree-card-avatar {
+  width: 68rpx;
+  height: 68rpx;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tree-card-emoji { font-size: 36rpx; }
+
+.tree-card-name {
+  font-size: 24rpx;
+  font-weight: 700;
+  color: #1a0f0c;
+  text-align: center;
+}
+
+.tree-card-relation {
+  font-size: 20rpx;
+  color: var(--color-text-sub);
+}
+
+.tree-card-age { font-size: 18rpx; color: #a08070; }
+
+.tree-card-family {
+  padding: 2rpx 14rpx;
+  border-radius: 9999rpx;
+  font-size: 18rpx;
+  font-weight: 700;
+}
+
+.legend {
+  background: #fff;
+  border-top: 1rpx solid #f0ebe6;
+  flex-shrink: 0;
+}
+
+.legend-inner {
+  display: flex;
+  flex-direction: row;
+  gap: 16rpx;
+  padding: 12rpx 20rpx calc(env(safe-area-inset-bottom) + 10rpx);
+  width: max-content;
+}
+
+.legend-item {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8rpx;
+  flex-shrink: 0;
+}
+
+.legend-dot {
+  width: 16rpx;
+  height: 16rpx;
+  border-radius: 50%;
+}
+
+.legend-name { font-size: 22rpx; color: var(--color-text-sub); }

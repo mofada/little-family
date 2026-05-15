@@ -1,0 +1,30 @@
+<view
+  wx:if="{{member}}"
+  class="member-card {{isDim ? 'member-card--dim' : ''}} {{isHighlight ? 'member-card--highlight' : ''}}"
+  style="border-color: {{isMe ? '#d4756a' : isHighlight ? '#facc15' : color}}; background: linear-gradient(145deg, {{color}}18, #ffffff); box-shadow: {{isHighlight ? '0 0 0 3px rgba(250,204,21,.55), 0 5px 16px rgba(0,0,0,.15)' : isBirthday ? '0 0 0 3px rgba(251,191,36,.35), 0 3px 12px rgba(0,0,0,.1)' : '0 2px 8px rgba(0,0,0,.08)'}};"
+  bindtap="onTap"
+>
+  <!-- 我的标记 -->
+  <view wx:if="{{isMe}}" class="member-card__badge member-card__badge--me">我</view>
+  <!-- 生日标记 -->
+  <view wx:if="{{isBirthday}}" class="member-card__badge member-card__badge--birthday">🎂</view>
+
+  <!-- 头像 -->
+  <view class="member-card__avatar" style="background: {{color}}20;">
+    <text class="member-card__avatar-emoji">{{avatarEmoji}}</text>
+  </view>
+
+  <!-- 姓名 -->
+  <text class="member-card__name">{{member.name}}</text>
+
+  <!-- 关系 -->
+  <text class="member-card__relation">{{member.relation}}</text>
+
+  <!-- 年龄 -->
+  <text class="member-card__age">{{age !== null ? age + '岁' : '-岁'}}</text>
+
+  <!-- 家族标签 -->
+  <view class="member-card__family-tag" style="background: {{color}}1a; color: {{color}};">
+    <text>{{member.familyName}}</text>
+  </view>
+</view>
