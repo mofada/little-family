@@ -1,53 +1,16 @@
 import { familyMembers, getFamilyColor, getFamilyBranches, calculateAge } from '../../utils/familyData'
 
-// Layout constants (in rpx)
-const CW = 176   // card width
-const CH = 220   // card height
-const CG = 24    // couple gap
-const UG = 72    // unit gap (sibling spacing)
-const GH = 320   // generation height
-const PL = 100   // padding left
-const PT = 40    // padding top
+const CARD_W = 186
+const CARD_H = 156
+const UNIT_GAP = 28
+const SPOUSE_GAP = 20
+const ROW_GAP = 228
+const PAD_X = 60
+const PAD_Y = 44
+const LINE_W = 4
+const CURRENT_USER_ID = '121'
 
-const SPOUSE_TARGET_IDS = new Set(
-  familyMembers
-    .filter(m => m.parentId !== null && !!m.spouseId)
-    .map(m => m.spouseId as string)
-)
-
-const MEMBER_JSON_BY_ID: Record<string, string> = Object.fromEntries(
-  familyMembers.map(m => [m.id, JSON.stringify(m)])
-)
-
-let buildTimer: number | null = null
-
-interface Unit {
-  primary: typeof familyMembers[0]
-  spouse?: typeof familyMembers[0]
-  x: number   // center x in rpx
-  y: number   // top y in rpx
-}
-
-interface CardView {
-  id: string
-  memberJson: string
-  name: string
-  relation: string
-  familyName: string
-  color: string
-  age: number | null
-  isMe: boolean
-  isBirthday: boolean
-  avatarEmoji: string
-  left: number
-  top: number
-}
-
-interface Connection {
-  x1: number; y1: number
-  x2: number; y2: number
-  color: string
-}
+type Member = typeof familyMembers[number]
 
 interface FamilyFilterItem {
   name: string
@@ -55,23 +18,76 @@ interface FamilyFilterItem {
   active: boolean
 }
 
+interface MemberNode {
+  id: string
+  memberJson: string
+  name: string
+  relation: string
+  familyName: string
+  color: string
+  age: number | null
+  avatarEmoji: string
+  isMe: boolean
+  left: number
+  top: number
+}
+
+interface EdgeSegment {
+  left: number
+  top: number
+  width: number
+  height: number
+  color: string
+  opacity: number
+}
+
+interface Unit {
+  key: string
+  members: Member[]
+  generation: number
+  parentRefId: string | null
+}
+
+interface UnitLayout extends Unit {
+  left: number
+  top: number
+  width: number
+  centerX: number
+}
+
+const MEMBER_JSON_BY_ID: Record<string, string> = Object.fromEntries(
+  familyMembers.map(m => [m.id, JSON.stringify(m)])
+)
+
+const CURRENT_USER_FAMILY =
+  familyMembers.find(m => m.id === CURRENT_USER_ID)?.familyName ??
+  familyMembers[0]?.familyName ??
+  ''
+
+const buildDefaultFamilyMap = (allFamilies: string[]): Record<string, boolean> =>
+  Object.fromEntries(allFamilies.map(name => [name, name === CURRENT_USER_FAMILY]))
+
+let buildTimer: number | null = null
+
 Component({
   data: {
-    canvasWidth: 0,
-    canvasHeight: 0,
-    cards: [] as CardView[],
-    connections: [] as Connection[],
     keyword: '',
     activeFamilyMap: {} as Record<string, boolean>,
     familyFilters: [] as FamilyFilterItem[],
-    allFamilies: [] as string[],
+    nodes: [] as MemberNode[],
+    edgeSegments: [] as EdgeSegment[],
+    canvasWidth: 750,
+    canvasHeight: 1200,
+    visibleCount: 0,
+    totalCount: familyMembers.length,
     showModal: false,
     selectedMemberJson: '',
-    legendItems: [] as { name: string; color: string }[],
-    hasBuilt: false,
   },
+
   lifetimes: {
-    attached() {},
+    attached() {
+      this.buildGraph()
+    },
     detached() {
       if (buildTimer !== null) {
         clearTimeout(buildTimer)
@@ -79,164 +95,89 @@ Component({
       }
     }
   },
+
   pageLifetimes: {
     show() {
-      if (this.data.hasBuilt) {
-        this.drawConnections()
-        return
-      }
-      this.buildTree()
+      this.buildGraph()
     }
   },
+
   methods: {
-    scheduleBuildTree(delay = 0) {
+    scheduleBuild(delay = 0) {
       if (buildTimer !== null) {
         clearTimeout(buildTimer)
       }
       buildTimer = setTimeout(() => {
         buildTimer = null
-        this.buildTree()
+        this.buildGraph()
       }, delay)
     },
 
-    buildTree() {
-      const { keyword } = this.data
-      const activeFamilyMap = this.data.activeFamilyMap
+    buildGraph() {
       const allFamilies = getFamilyBranches()
+      const keyword = this.data.keyword.trim().toLowerCase()
 
-      // Init active families if empty
-      if (Object.keys(activeFamilyMap).length === 0) {
-        const init: Record<string, boolean> = {}
-        allFamilies.forEach(f => { init[f] = true })
-        this.setData({ activeFamilyMap: init })
-      }
+      const activeFamilyMap = Object.keys(this.data.activeFamilyMap).length === 0
+        ? buildDefaultFamilyMap(allFamilies)
+        : this.data.activeFamilyMap
 
       const activeSet = new Set(
-        allFamilies.filter(f => this.data.activeFamilyMap[f] !== false)
+        allFamilies.filter(name => activeFamilyMap[name] !== false)
       )
 
-      const kw = keyword.trim().toLowerCase()
-
-      // Build units per generation
       const memberById = new Map(familyMembers.map(m => [m.id, m]))
 
-      // A unit has a primary (one with parentId or no spouse) + optional spouse
-      // Primary members = those whose parentId is set OR generation=1 with no parentId
-      const primaries = familyMembers.filter(m => !SPOUSE_TARGET_IDS.has(m.id))
+      const activeMembers = familyMembers.filter(m => activeSet.has(m.familyName))
 
-      const units: Unit[] = primaries.map(p => {
-        const spouse = p.spouseId ? memberById.get(p.spouseId) : undefined
-        return { primary: p, spouse, x: 0, y: 0 }
-      })
-
-      // Group units by generation
-      const genMap = new Map<number, Unit[]>()
-      units.forEach(u => {
-        const gen = u.primary.generation
-        if (!genMap.has(gen)) genMap.set(gen, [])
-        genMap.get(gen)!.push(u)
-      })
-
-      // Unit width: primary card + optional spouse card + couple gap
-      const unitWidth = (u: Unit) => u.spouse ? CW * 2 + CG : CW
-
-      // Compute positions generation by generation
-      const unitMap = new Map<string, Unit>()
-      const sortedGens = Array.from(genMap.keys()).sort()
-
-      for (const gen of sortedGens) {
-        const genUnits = genMap.get(gen)!
-
-        if (gen === sortedGens[0]) {
-          // First gen: sort by id, lay out from left
-          genUnits.sort((a, b) => a.primary.id.localeCompare(b.primary.id))
-          let x = PL
-          for (const u of genUnits) {
-            const w = unitWidth(u)
-            u.x = x + w / 2
-            u.y = PT + (gen - 1) * GH
-            x += w + UG
-            unitMap.set(u.primary.id, u)
-          }
-        } else {
-          // Sort by parent center x
-          genUnits.sort((a, b) => {
-            const pa = unitMap.get(a.primary.parentId ?? '') ?? unitMap.get(a.primary.id)
-            const pb = unitMap.get(b.primary.parentId ?? '') ?? unitMap.get(b.primary.id)
-            return (pa?.x ?? 0) - (pb?.x ?? 0)
+      const directMatchedIds = new Set<string>(
+        activeMembers
+          .filter(m => {
+            if (!keyword) return true
+            return [m.name, m.relation, m.nickName ?? '', m.familyName]
+              .join('|')
+              .toLowerCase()
+              .includes(keyword)
           })
-          let x = PL
-          for (const u of genUnits) {
-            const parentUnit = unitMap.get(u.primary.parentId ?? '')
-            const w = unitWidth(u)
-            // If same parent as previous unit, keep close; else use next position
-            u.x = Math.max(x + w / 2, (parentUnit?.x ?? x + w / 2))
-            u.y = PT + (gen - 1) * GH
-            x = u.x + w / 2 + UG
-            unitMap.set(u.primary.id, u)
+          .map(m => m.id)
+      )
+
+      const visibleIds = new Set<string>()
+      const addIfActive = (id: string | null | undefined) => {
+        if (!id) return
+        const member = memberById.get(id)
+        if (!member || !activeSet.has(member.familyName)) return
+        visibleIds.add(id)
+      }
+
+      directMatchedIds.forEach(id => addIfActive(id))
+
+      // 搜索时保留一层亲缘上下文，避免图谱断裂成无意义碎片
+      if (keyword) {
+        Array.from(directMatchedIds).forEach(id => {
+          const member = memberById.get(id)
+          if (!member) return
+
+          addIfActive(member.spouseId)
+          addIfActive(member.parentId)
+
+          if (member.parentId) {
+            const parent = memberById.get(member.parentId)
+            addIfActive(parent?.spouseId)
           }
-        }
-      }
 
-      // Compute total canvas size
-      let maxX = 0
-      let maxY = 0
-      for (const u of units) {
-        const w = unitWidth(u)
-        maxX = Math.max(maxX, u.x + w / 2 + PL)
-        maxY = Math.max(maxY, u.y + CH + PT)
-      }
-
-      // Build card views
-      const kSet = new Set<string>()
-      if (kw) {
-        familyMembers.forEach(m => {
-          if (m.name.toLowerCase().includes(kw)) kSet.add(m.id)
+          familyMembers.forEach(candidate => {
+            if (candidate.parentId === id || candidate.parentId === member.spouseId) {
+              addIfActive(candidate.id)
+            }
+          })
         })
       }
 
-      const cards: CardView[] = []
-      for (const u of units) {
-        const members = [u.primary, ...(u.spouse ? [u.spouse] : [])]
-        for (let i = 0; i < members.length; i++) {
-          const m = members[i]
-          if (!activeSet.has(m.familyName)) continue
-          const offset = i === 0 ? -(unitWidth(u) / 2) : (unitWidth(u) / 2 - CW)
-          const left = u.x + offset
-          const top = u.y
-          cards.push({
-            id: m.id,
-            memberJson: MEMBER_JSON_BY_ID[m.id],
-            name: m.name,
-            relation: m.relation,
-            familyName: m.familyName,
-            color: getFamilyColor(m.familyName),
-            age: calculateAge(m.birthYear),
-            isMe: m.id === '121',
-            isBirthday: false,
-            avatarEmoji: m.gender === 'male' ? '👨' : '👩',
-            left,
-            top,
-          })
-        }
-      }
+      const visibleMembers = familyMembers.filter(m => visibleIds.has(m.id))
 
-      // Build connections
-      const connections: Connection[] = []
-      for (const u of units) {
-        const parentUnit = unitMap.get(u.primary.parentId ?? '')
-        if (parentUnit) {
-          const fromX = parentUnit.x
-          const fromY = parentUnit.y + CH
-          const toX = u.x
-          const toY = u.y
-          connections.push({
-            x1: fromX, y1: fromY,
-            x2: toX, y2: toY,
-            color: getFamilyColor(u.primary.familyName),
-          })
-        }
-      }
+      const { units } = this.buildUnits(visibleMembers)
+      const layouts = this.layoutUnits(units)
+      const { nodes, edgeSegments, canvasWidth, canvasHeight } = this.buildGraphPrimitives(layouts)
 
       const familyFilters: FamilyFilterItem[] = allFamilies.map(name => ({
         name,
@@ -244,76 +185,262 @@ Component({
         active: activeSet.has(name),
       }))
 
-      const legendItems = allFamilies.map(name => ({
-        name,
-        color: getFamilyColor(name),
-      }))
-
       this.setData({
-        canvasWidth: maxX,
-        canvasHeight: maxY,
-        cards,
-        connections,
+        activeFamilyMap,
         familyFilters,
-        allFamilies,
-        legendItems,
-        hasBuilt: true,
-      }, () => {
-        this.drawConnections()
+        nodes,
+        edgeSegments,
+        canvasWidth,
+        canvasHeight,
+        visibleCount: nodes.length,
       })
     },
 
-    drawConnections() {
-      const { connections, canvasWidth, canvasHeight } = this.data
-      if (connections.length === 0 || canvasWidth === 0) return
+    buildUnits(visibleMembers: Member[]) {
+      const visibleById = new Map(visibleMembers.map(m => [m.id, m]))
+      const used = new Set<string>()
+      const units: Unit[] = []
+      const memberToUnit = new Map<string, string>()
 
-      const query = wx.createSelectorQuery().in(this)
-      query.select('#tree-canvas').fields({ node: true, size: true }).exec((res: WechatMiniprogram.SelectorQueryNodeInfo[]) => {
-        if (!res[0] || !res[0].node) return
-        const canvas = res[0].node as unknown as WechatMiniprogram.Canvas
-        const ctx = canvas.getContext('2d') as unknown as CanvasRenderingContext2D
-        const dpr = wx.getWindowInfo().pixelRatio
-
-        // Get actual CSS size from canvas element
-        const cssW = (res[0] as { width: number }).width || canvasWidth / 2
-        const cssH = (res[0] as { height: number }).height || canvasHeight / 2
-
-        canvas.width = cssW * dpr
-        canvas.height = cssH * dpr
-        ctx.scale(dpr, dpr)
-
-        // rpx → CSS px (screen width = 750rpx)
-        const sysInfo = wx.getWindowInfo()
-        const rpxRatio = sysInfo.windowWidth / 750
-
-        ctx.clearRect(0, 0, cssW, cssH)
-
-        for (const conn of connections) {
-          const x1 = conn.x1 * rpxRatio
-          const y1 = conn.y1 * rpxRatio
-          const x2 = conn.x2 * rpxRatio
-          const y2 = conn.y2 * rpxRatio
-          const mid = (y2 - y1) / 2
-
-          ctx.beginPath()
-          ctx.moveTo(x1, y1)
-          ctx.bezierCurveTo(x1, y1 + mid, x2, y2 - mid, x2, y2)
-          ctx.strokeStyle = conn.color + 'aa'
-          ctx.lineWidth = 2
-          ctx.stroke()
-        }
+      const ordered = [...visibleMembers].sort((a, b) => {
+        if (a.generation !== b.generation) return a.generation - b.generation
+        return a.id.localeCompare(b.id)
       })
+
+      ordered.forEach(member => {
+        if (used.has(member.id)) return
+
+        const spouse = member.spouseId ? visibleById.get(member.spouseId) : undefined
+        let members: Member[] = [member]
+
+        if (spouse && !used.has(spouse.id)) {
+          members = [member, spouse].sort((a, b) => {
+            const aPrimary = a.parentId !== null
+            const bPrimary = b.parentId !== null
+            if (aPrimary !== bPrimary) return aPrimary ? -1 : 1
+            return a.id.localeCompare(b.id)
+          })
+        }
+
+        const key = members.map(m => m.id).sort().join('_')
+        const generation = Math.min(...members.map(m => m.generation))
+        const parentRefId = members.find(m => m.parentId)?.parentId ?? null
+
+        units.push({ key, members, generation, parentRefId })
+
+        members.forEach(m => {
+          used.add(m.id)
+          memberToUnit.set(m.id, key)
+        })
+      })
+
+      return { units, memberToUnit }
+    },
+
+    layoutUnits(units: Unit[]) {
+      const grouped = new Map<number, Unit[]>()
+      units.forEach(u => {
+        if (!grouped.has(u.generation)) grouped.set(u.generation, [])
+        grouped.get(u.generation)!.push(u)
+      })
+
+      const generations = Array.from(grouped.keys()).sort((a, b) => a - b)
+      const minGeneration = generations[0] ?? 1
+      const layoutsByKey = new Map<string, UnitLayout>()
+      const memberCenterX = new Map<string, number>()
+
+      generations.forEach(generation => {
+        const rowUnits = grouped.get(generation) ?? []
+
+        const withDesiredCenter = rowUnits.map(unit => {
+          const parentCenters = unit.members
+            .map(m => (m.parentId ? memberCenterX.get(m.parentId) : undefined))
+            .filter((x): x is number => typeof x === 'number')
+
+          const desiredCenter = parentCenters.length > 0
+            ? parentCenters.reduce((sum, x) => sum + x, 0) / parentCenters.length
+            : null
+
+          return { unit, desiredCenter }
+        })
+
+        withDesiredCenter.sort((a, b) => {
+          if (a.desiredCenter !== null && b.desiredCenter !== null) return a.desiredCenter - b.desiredCenter
+          if (a.desiredCenter !== null) return -1
+          if (b.desiredCenter !== null) return 1
+          return a.unit.key.localeCompare(b.unit.key)
+        })
+
+        let cursorX = PAD_X
+        const rowTop = PAD_Y + (generation - minGeneration) * ROW_GAP
+        const rowLayouts: UnitLayout[] = []
+
+        withDesiredCenter.forEach(({ unit, desiredCenter }) => {
+          const width = unit.members.length * CARD_W + Math.max(unit.members.length - 1, 0) * SPOUSE_GAP
+          const preferredLeft = desiredCenter !== null ? Math.floor(desiredCenter - width / 2) : cursorX
+          const left = Math.max(cursorX, preferredLeft)
+          const centerX = left + width / 2
+
+          const layout: UnitLayout = {
+            ...unit,
+            left,
+            top: rowTop,
+            width,
+            centerX,
+          }
+
+          rowLayouts.push(layout)
+          cursorX = left + width + UNIT_GAP
+        })
+
+        const rowDesiredCenters = withDesiredCenter
+          .map(x => x.desiredCenter)
+          .filter((x): x is number => x !== null)
+
+        if (rowLayouts.length > 0 && rowDesiredCenters.length > 0) {
+          const minLeft = Math.min(...rowLayouts.map(l => l.left))
+          const maxRight = Math.max(...rowLayouts.map(l => l.left + l.width))
+          const rowCenter = (minLeft + maxRight) / 2
+          const desiredCenter = rowDesiredCenters.reduce((sum, x) => sum + x, 0) / rowDesiredCenters.length
+          const shift = Math.round(desiredCenter - rowCenter)
+
+          if (shift !== 0 && minLeft + shift >= PAD_X) {
+            rowLayouts.forEach(layout => {
+              layout.left += shift
+              layout.centerX += shift
+            })
+          }
+        }
+
+        rowLayouts.forEach(layout => {
+          layoutsByKey.set(layout.key, layout)
+          layout.members.forEach((member, index) => {
+            const centerX = layout.left + index * (CARD_W + SPOUSE_GAP) + CARD_W / 2
+            memberCenterX.set(member.id, centerX)
+          })
+        })
+      })
+
+      return Array.from(layoutsByKey.values())
+    },
+
+    buildGraphPrimitives(layouts: UnitLayout[]) {
+
+      const nodes: MemberNode[] = []
+      let maxRight = 750
+      let maxBottom = 1200
+
+      layouts.forEach(layout => {
+        layout.members.forEach((member, index) => {
+          const left = layout.left + index * (CARD_W + SPOUSE_GAP)
+          const top = layout.top
+
+          nodes.push({
+            id: member.id,
+            memberJson: MEMBER_JSON_BY_ID[member.id],
+            name: member.name,
+            relation: member.relation,
+            familyName: member.familyName,
+            color: getFamilyColor(member.familyName),
+            age: calculateAge(member.birthYear),
+            avatarEmoji: member.gender === 'male' ? '👨' : '👩',
+            isMe: member.id === '121',
+            left,
+            top,
+          })
+
+          maxRight = Math.max(maxRight, left + CARD_W + PAD_X)
+          maxBottom = Math.max(maxBottom, top + CARD_H + PAD_Y)
+        })
+      })
+
+      const edgeSegments: EdgeSegment[] = []
+      const memberPos = new Map<string, { centerX: number; top: number; centerY: number }>()
+      const pushSegment = (left: number, top: number, width: number, height: number, color: string, opacity = 0.35) => {
+        if (width <= 0 || height <= 0) return
+        edgeSegments.push({ left, top, width, height, color, opacity })
+      }
+
+      layouts.forEach(layout => {
+        layout.members.forEach((member, index) => {
+          const left = layout.left + index * (CARD_W + SPOUSE_GAP)
+          memberPos.set(member.id, {
+            centerX: left + CARD_W / 2,
+            top: layout.top,
+            centerY: layout.top + CARD_H / 2,
+          })
+        })
+      })
+
+      layouts.forEach(layout => {
+        layout.members.forEach(member => {
+          if (!member.parentId) return
+          const parentPos = memberPos.get(member.parentId)
+          const childPos = memberPos.get(member.id)
+          if (!parentPos || !childPos) return
+
+          const fromX = parentPos.centerX
+          const fromY = parentPos.top + CARD_H
+          const toX = childPos.centerX
+          const toY = childPos.top
+          if (toY <= fromY) return
+
+          const midY = Math.floor((fromY + toY) / 2)
+          const color = getFamilyColor(member.familyName)
+
+          pushSegment(fromX - LINE_W / 2, fromY, LINE_W, midY - fromY, color)
+
+          const hLeft = Math.min(fromX, toX)
+          const hWidth = Math.max(Math.abs(toX - fromX), LINE_W)
+          pushSegment(hLeft, midY - LINE_W / 2, hWidth, LINE_W, color)
+
+          pushSegment(toX - LINE_W / 2, midY, LINE_W, toY - midY, color)
+        })
+      })
+
+      const spouseDone = new Set<string>()
+      layouts.forEach(layout => {
+        layout.members.forEach(member => {
+          if (!member.spouseId) return
+          if (!memberPos.has(member.spouseId)) return
+          const key = [member.id, member.spouseId].sort().join('_')
+          if (spouseDone.has(key)) return
+          spouseDone.add(key)
+
+          const leftPos = memberPos.get(member.id)
+          const rightPos = memberPos.get(member.spouseId)
+          if (!leftPos || !rightPos) return
+
+          const y = Math.round((leftPos.centerY + rightPos.centerY) / 2)
+          const left = Math.min(leftPos.centerX, rightPos.centerX)
+          const width = Math.max(Math.abs(rightPos.centerX - leftPos.centerX), LINE_W)
+          pushSegment(left, y - LINE_W / 2, width, LINE_W, getFamilyColor(member.familyName), 0.25)
+        })
+      })
+
+      return {
+        nodes,
+        edgeSegments,
+        canvasWidth: maxRight,
+        canvasHeight: maxBottom,
+      }
     },
 
     onSearch(e: WechatMiniprogram.Input) {
-      this.setData({ keyword: e.detail.value }, () => this.scheduleBuildTree(120))
+      this.setData({ keyword: e.detail.value }, () => this.scheduleBuild(120))
     },
 
     toggleFamily(e: WechatMiniprogram.TouchEvent) {
       const name = (e.currentTarget.dataset as { name: string }).name
-      const obj = { ...this.data.activeFamilyMap }
-      obj[name] = !obj[name]
-      this.setData({ activeFamilyMap: obj }, () => this.scheduleBuildTree())
+      const next = { ...this.data.activeFamilyMap }
+      next[name] = !next[name]
+      this.setData({ activeFamilyMap: next }, () => this.scheduleBuild())
+    },
+
+    resetFamilyFilters() {
+      const allFamilies = getFamilyBranches()
+      const next = buildDefaultFamilyMap(allFamilies)
+      this.setData({ activeFamilyMap: next }, () => this.buildGraph())
     },
 
     onCardTap(e: WechatMiniprogram.TouchEvent) {
