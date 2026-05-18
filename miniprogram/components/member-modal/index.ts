@@ -1,5 +1,6 @@
 import { familyMembers, calculateAge, getDaysUntilBirthday, buildBirthdayPrompt, getFamilyColor } from '../../utils/familyData'
 import { copyToClipboard } from '../../utils/common'
+import { requestFamilySubscribe } from '../../utils/subscription'
 
 interface MemberData {
   id: string
@@ -106,6 +107,14 @@ Component({
       if (!member) return
       const prompt = buildBirthdayPrompt(member)
       copyToClipboard(prompt, '✅ 已复制祝福Prompt')
+    },
+    subscribeBirthday() {
+      const { member } = this.data
+      if (!member) return
+      void requestFamilySubscribe({
+        scene: 'member-modal',
+        memberName: member.name,
+      })
     }
   }
 })

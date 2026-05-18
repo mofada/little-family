@@ -102,6 +102,9 @@
 
       <!-- 操作按钮 -->
       <view class="modal-actions">
+        <view class="modal-btn modal-btn--secondary" bindtap="subscribeBirthday">
+          <text>🔔 订阅该成员生日提醒</text>
+        </view>
         <view class="modal-btn modal-btn--primary" bindtap="copyPrompt">
           <text>📋 复制生日祝福 Prompt</text>
         </view>

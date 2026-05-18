@@ -275,3 +275,25 @@
 .branch-name { font-size: 26rpx; font-weight: 600; color: var(--color-primary); flex: 1; }
 .branch-count { font-size: 22rpx; color: var(--color-text-sub); }
 
+.subscribe-actions {
+  display: flex;
+  flex-direction: row;
+  gap: 16rpx;
+}
+
+.subscribe-action {
+  flex: 1;
+  border-radius: 18rpx;
+  background: #f7f3ef;
+  color: var(--color-text-sub);
+  text-align: center;
+  padding: 20rpx 12rpx;
+  font-size: 26rpx;
+  font-weight: 600;
+
+  &--primary {
+    background: var(--color-accent);
+    color: #fff;
+  }
+}
+

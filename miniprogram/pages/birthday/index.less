@@ -38,6 +38,56 @@
   gap: 12rpx;
 }
 
+.subscribe-panel {
+  margin-top: 16rpx;
+  padding: 18rpx;
+  border-radius: 20rpx;
+  background: linear-gradient(135deg, rgba(212,117,106,.12), rgba(168,134,108,.1));
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20rpx;
+}
+
+.subscribe-panel__info {
+  flex: 1;
+}
+
+.subscribe-panel__title {
+  display: block;
+  font-size: 26rpx;
+  font-weight: 700;
+  color: var(--color-primary);
+}
+
+.subscribe-panel__sub {
+  display: block;
+  margin-top: 6rpx;
+  font-size: 22rpx;
+  color: var(--color-text-sub);
+}
+
+.subscribe-panel__actions {
+  display: flex;
+  flex-direction: row;
+  gap: 10rpx;
+  flex-shrink: 0;
+}
+
+.subscribe-btn {
+  padding: 10rpx 16rpx;
+  border-radius: 9999rpx;
+  background: #fff;
+  font-size: 22rpx;
+  color: var(--color-text-sub);
+
+  &--primary {
+    background: var(--color-accent);
+    color: #fff;
+  }
+}
+
 .chip {
   padding: 10rpx 28rpx;
   border-radius: 9999rpx;

@@ -3,6 +3,11 @@ import {
   buildBirthdayPrompt, getFamilyColor
 } from '../../utils/familyData'
 import { copyToClipboard } from '../../utils/common'
+import {
+  requestFamilySubscribe,
+  openSubscribeSettingPanel,
+  getConfiguredSubscribeTemplateIds,
+} from '../../utils/subscription'
 
 interface MonthSection {
   label: string
@@ -31,18 +36,28 @@ Component({
     filterType: 'all' as 'all' | 'lunar' | 'solar',
     todayMembers: [] as MemberRow[],
     monthSections: [] as MonthSection[],
+    subscribeTemplateCount: 0,
     showModal: false,
     selectedMemberJson: '',
   },
   lifetimes: {
-    attached() { this.buildList() }
+    attached() {
+      this.buildList()
+      this.refreshSubscribeState()
+    }
   },
   pageLifetimes: {
     show() {
       this.buildList()
+      this.refreshSubscribeState()
     }
   },
   methods: {
+    refreshSubscribeState() {
+      const ids = getConfiguredSubscribeTemplateIds()
+      this.setData({ subscribeTemplateCount: ids.length })
+    },
+
     buildList() {
       const { keyword, filterType } = this.data
       const kw = keyword.trim().toLowerCase()
@@ -122,6 +137,14 @@ Component({
       const id = (e.currentTarget.dataset as { id: string }).id
       const member = familyMembers.find(m => m.id === id)
       if (member) copyToClipboard(buildBirthdayPrompt(member), '✅ 已复制祝福Prompt')
+    },
+
+    subscribeNow() {
+      void requestFamilySubscribe({ scene: 'birthday-page' })
+    },
+
+    openSubscribeSettings() {
+      openSubscribeSettingPanel()
     },
 
     onModalClose() {

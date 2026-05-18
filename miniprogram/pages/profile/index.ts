@@ -2,6 +2,11 @@ import {
   familyMembers, getFamilyColor, calculateAge, getDaysUntilBirthday,
   getFamilyBranches, findRelationPath
 } from '../../utils/familyData'
+import {
+  requestFamilySubscribe,
+  openSubscribeSettingPanel,
+  getConfiguredSubscribeTemplateIds,
+} from '../../utils/subscription'
 
 interface MeData {
   id: string
@@ -67,6 +72,7 @@ Component({
     relationPath: [] as PathStep[],
     pathFound: false,
     pathSearched: false,
+    subscribeTemplateCount: 0,
     showModal: false,
     selectedMemberJson: '',
   },
@@ -188,7 +194,16 @@ Component({
         fromMemberId: '121',
         fromMemberIdx: fromIdx,
         toMemberIdx: -1,
+        subscribeTemplateCount: getConfiguredSubscribeTemplateIds().length,
       })
+    },
+
+    subscribeNow() {
+      void requestFamilySubscribe({ scene: 'profile-page' })
+    },
+
+    openSubscribeSettings() {
+      openSubscribeSettingPanel()
     },
 
     onFromChange(e: WechatMiniprogram.PickerChange) {

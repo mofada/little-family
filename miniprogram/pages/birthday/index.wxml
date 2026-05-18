@@ -29,6 +29,21 @@
         data-type="solar"
       ><text>阳历</text></view>
     </view>
+
+    <view class="subscribe-panel">
+      <view class="subscribe-panel__info">
+        <text class="subscribe-panel__title">🔔 订阅生日提醒</text>
+        <text class="subscribe-panel__sub">已配置模板 {{subscribeTemplateCount}} 条</text>
+      </view>
+      <view class="subscribe-panel__actions">
+        <view class="subscribe-btn subscribe-btn--primary" bindtap="subscribeNow">
+          <text>立即订阅</text>
+        </view>
+        <view class="subscribe-btn" bindtap="openSubscribeSettings">
+          <text>消息设置</text>
+        </view>
+      </view>
+    </view>
   </view>
 
   <scroll-view class="page__list" scroll-y type="list" enhanced show-scrollbar="{{false}}">
