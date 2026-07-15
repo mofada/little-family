@@ -10,7 +10,7 @@
       </picker>
       <view class="form-row">
         <input class="input" placeholder="新家庭名称" value="{{newFamilyName}}" bindinput="onFamilyNameInput" maxlength="30" />
-        <button class="small-button primary" bindtap="createFamily">创建</button>
+        <view class="small-button primary" bindtap="createFamily" hover-class="action-pressed">创建</view>
       </view>
     </view>
 
@@ -18,14 +18,14 @@
       <text class="card-title">通过邀请码加入</text>
       <view class="form-row">
         <input class="input" placeholder="输入亲人发来的邀请码" value="{{joinCode}}" bindinput="onJoinCodeInput" />
-        <button class="small-button" bindtap="joinFamily">加入</button>
+        <view class="small-button" bindtap="joinFamily" hover-class="action-pressed">加入</view>
       </view>
     </view>
 
     <view wx:if="{{activeFamilyId}}" class="card">
       <view class="title-row">
         <view><text class="card-title">家庭成员</text><text class="sub">{{members.length}} 人 · {{activeRole}}</text></view>
-        <button wx:if="{{canEdit}}" class="small-button primary" bindtap="startAdd">新增成员</button>
+        <view wx:if="{{canEdit}}" class="small-button primary" bindtap="startAdd" hover-class="action-pressed">新增成员</view>
       </view>
       <view wx:if="{{members.length === 0}}" class="empty"><text>还没有成员，先添加第一位家人吧</text></view>
       <view wx:for="{{members}}" wx:key="id" class="member-row">
@@ -33,15 +33,15 @@
           <text class="member-name">{{item.name}}</text>
           <text class="sub">{{item.relation || '未设置称呼'}} · {{item.branchName}}</text>
         </view>
-        <button class="text-button" bindtap="setAsMe" data-id="{{item.id}}">{{linkedMemberId === item.id ? '我 ✓' : '设为我'}}</button>
-        <button wx:if="{{canEdit}}" class="text-button danger" bindtap="removeMember" data-id="{{item.id}}" data-name="{{item.name}}">删除</button>
+        <view class="text-button" bindtap="setAsMe" data-id="{{item.id}}" hover-class="action-pressed">{{linkedMemberId === item.id ? '我 ✓' : '设为我'}}</view>
+        <view wx:if="{{canEdit}}" class="text-button danger" bindtap="removeMember" data-id="{{item.id}}" data-name="{{item.name}}" hover-class="action-pressed">删除</view>
       </view>
     </view>
 
     <view wx:if="{{activeFamilyId && canInvite}}" class="card">
       <text class="card-title">邀请亲人</text>
       <text class="sub">生成一次性编辑者邀请码，72 小时内有效</text>
-      <button class="full-button" bindtap="generateInvite">生成并复制邀请码</button>
+      <view class="full-button" bindtap="generateInvite" hover-class="action-pressed">生成并复制邀请码</view>
       <text wx:if="{{inviteCode}}" class="invite-code">{{inviteCode}}</text>
     </view>
   </scroll-view>

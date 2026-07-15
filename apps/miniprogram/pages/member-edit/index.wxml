@@ -11,10 +11,7 @@
       <input class="input" value="{{form.branchName}}" data-field="branchName" bindinput="setText" maxlength="30" placeholder="例如：莫家" />
       <text class="label">家庭称呼</text>
       <input class="input" value="{{form.relation}}" data-field="relation" bindinput="setText" maxlength="20" placeholder="例如：爸爸、姐姐" />
-      <view class="two-cols">
-        <view class="field"><text class="label">性别</text><picker mode="selector" range="{{genderOptions}}" value="{{genderIndex}}" bindchange="onGenderChange"><view class="picker">{{genderIndex === 0 ? '男' : '女'}} ›</view></picker></view>
-        <view class="field"><text class="label">第几代</text><input class="input" type="number" value="{{form.generation}}" data-field="generation" bindinput="setNumber" /></view>
-      </view>
+      <view class="field"><text class="label">性别</text><picker mode="selector" range="{{genderOptions}}" value="{{genderIndex}}" bindchange="onGenderChange"><view class="picker">{{genderIndex === 0 ? '男' : '女'}} ›</view></picker></view>
     </view>
 
     <view class="card">

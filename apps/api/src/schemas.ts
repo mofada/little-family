@@ -14,7 +14,6 @@ export const familySchema = z.object({
 
 export const memberSchema = z.object({
   branchName: z.string().trim().min(1).max(30),
-  generation: z.number().int().min(1).max(20),
   name: z.string().trim().min(1).max(30),
   nickName: optionalTrimmed,
   relation: z.string().trim().max(20).optional().default(''),

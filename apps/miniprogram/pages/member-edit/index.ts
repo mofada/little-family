@@ -5,7 +5,7 @@ import { FamilyMember } from '../../types/family'
 interface MemberOption { id: string; name: string }
 
 const emptyForm = (): MemberInput => ({
-  branchName: '', generation: 1, name: '', nickName: '', relation: '', birthYear: null,
+  branchName: '', name: '', nickName: '', relation: '', birthYear: null,
   gender: 'male', birthdayType: 'lunar', birthMonth: 1, birthDay: 1,
   isLeapMonth: false, parentId: null, spouseId: null,
 })
@@ -45,7 +45,6 @@ Component({
         ]
         const form: MemberInput = editing ? {
           branchName: editing.familyName,
-          generation: editing.generation,
           name: editing.name,
           nickName: editing.nickName ?? '',
           relation: editing.relation,
@@ -114,8 +113,8 @@ Component({
         wx.showToast({ title: '姓名和家族分支不能为空', icon: 'none' })
         return
       }
-      if (!Number.isInteger(form.generation) || !Number.isInteger(form.birthMonth) || !Number.isInteger(form.birthDay)) {
-        wx.showToast({ title: '请填写有效的代际和生日', icon: 'none' })
+      if (!Number.isInteger(form.birthMonth) || !Number.isInteger(form.birthDay)) {
+        wx.showToast({ title: '请填写有效的生日', icon: 'none' })
         return
       }
       const snapshot = getCurrentSnapshot()

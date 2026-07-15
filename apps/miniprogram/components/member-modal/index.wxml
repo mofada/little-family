@@ -18,9 +18,6 @@
             <view class="modal-tag" style="background: {{member.gender === 'male' ? '#dbeafe' : '#fce7f3'}}; color: {{member.gender === 'male' ? '#1d4ed8' : '#be185d'}};">
               <text>{{member.familyName}}</text>
             </view>
-            <view class="modal-tag modal-tag--gen">
-              <text>第{{member.generation}}代</text>
-            </view>
           </view>
         </view>
       </view>

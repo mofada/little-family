@@ -9,7 +9,6 @@ interface MemberData {
   parentId: string | null
   spouseId: string | null
   familyName: string
-  generation: number
   name: string
   nickName?: string
   relation: string

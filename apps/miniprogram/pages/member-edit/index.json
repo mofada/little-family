@@ -2,6 +2,6 @@
   "navigationBarTextStyle": "black",
   "navigationStyle": "custom",
   "usingComponents": {
-    "navigation-bar": "/components/navigation-bar/navigation-bar"
+    "navigation-bar": "../../components/navigation-bar/navigation-bar"
   }
 }

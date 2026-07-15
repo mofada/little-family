@@ -26,7 +26,6 @@ export interface FamilySnapshot {
 
 export interface MemberInput {
   branchName: string
-  generation: number
   name: string
   nickName?: string | null
   relation: string

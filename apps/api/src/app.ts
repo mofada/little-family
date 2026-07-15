@@ -35,7 +35,6 @@ const audit = (
 interface MemberRow {
   id: string
   branch_name: string
-  generation: number
   name: string
   nickname: string | null
   relation_label: string
@@ -45,6 +44,7 @@ interface MemberRow {
   birth_month: number
   birth_day: number
   is_leap_month: number
+  created_at: string
 }
 
 interface RelationshipRow {
@@ -54,16 +54,82 @@ interface RelationshipRow {
   type: 'parent' | 'spouse'
 }
 
+const inferGenerations = (
+  memberIds: string[],
+  relationships: RelationshipRow[],
+): Map<string, number> => {
+  const memberSet = new Set(memberIds)
+  const neighbors = new Map<string, Array<{ id: string; offset: number }>>()
+  memberIds.forEach(id => neighbors.set(id, []))
+
+  relationships.forEach(relationship => {
+    if (!memberSet.has(relationship.from_member_id) || !memberSet.has(relationship.to_member_id)) return
+    const offset = relationship.type === 'parent' ? 1 : 0
+    neighbors.get(relationship.from_member_id)?.push({ id: relationship.to_member_id, offset })
+    neighbors.get(relationship.to_member_id)?.push({ id: relationship.from_member_id, offset: -offset })
+  })
+
+  const inferred = new Map<string, number>()
+  memberIds.forEach(startId => {
+    if (inferred.has(startId)) return
+
+    const component: string[] = [startId]
+    const queue: string[] = [startId]
+    inferred.set(startId, 0)
+
+    while (queue.length > 0) {
+      const currentId = queue.shift()!
+      const currentGeneration = inferred.get(currentId)!
+      for (const neighbor of neighbors.get(currentId) ?? []) {
+        const expected = currentGeneration + neighbor.offset
+        const existing = inferred.get(neighbor.id)
+        if (existing !== undefined && existing !== expected) {
+          throw new AppError(400, '家庭关系存在代际矛盾，请检查父母或配偶关系', 'INVALID_GENERATION_RELATIONSHIP')
+        }
+        if (existing === undefined) {
+          inferred.set(neighbor.id, expected)
+          component.push(neighbor.id)
+          queue.push(neighbor.id)
+        }
+      }
+    }
+
+    const minGeneration = Math.min(...component.map(id => inferred.get(id)!))
+    component.forEach(id => inferred.set(id, inferred.get(id)! - minGeneration + 1))
+    if (component.some(id => inferred.get(id)! > 20)) {
+      throw new AppError(400, '家庭关系超过 20 代，请检查父母关系', 'GENERATION_LIMIT_EXCEEDED')
+    }
+  })
+
+  return inferred
+}
+
+const syncFamilyGenerations = (familyId: string): void => {
+  const memberIds = db.prepare('SELECT id FROM members WHERE family_id = ?')
+    .all(familyId) as unknown as Array<{ id: string }>
+  const relationships = db.prepare(`
+    SELECT id, from_member_id, to_member_id, type
+    FROM relationships WHERE family_id = ?
+  `).all(familyId) as unknown as RelationshipRow[]
+  const generations = inferGenerations(memberIds.map(member => member.id), relationships)
+  const updateGeneration = db.prepare('UPDATE members SET generation = ? WHERE id = ? AND family_id = ?')
+  generations.forEach((generation, memberId) => {
+    updateGeneration.run(generation, memberId, familyId)
+  })
+}
+
 const getSnapshot = (familyId: string) => {
   const members = db.prepare(`
-    SELECT id, branch_name, generation, name, nickname, relation_label, birth_year,
-           gender, birthday_type, birth_month, birth_day, is_leap_month
-    FROM members WHERE family_id = ? ORDER BY generation, created_at
+    SELECT id, branch_name, name, nickname, relation_label, birth_year,
+           gender, birthday_type, birth_month, birth_day, is_leap_month, created_at
+    FROM members WHERE family_id = ?
   `).all(familyId) as unknown as MemberRow[]
   const relationships = db.prepare(`
     SELECT id, from_member_id, to_member_id, type
     FROM relationships WHERE family_id = ?
   `).all(familyId) as unknown as RelationshipRow[]
+  const generations = inferGenerations(members.map(member => member.id), relationships)
+  members.sort((a, b) => (generations.get(a.id)! - generations.get(b.id)!) || a.created_at.localeCompare(b.created_at))
 
   return {
     members: members.map(member => {
@@ -79,7 +145,7 @@ const getSnapshot = (familyId: string) => {
         parentId: parent?.from_member_id ?? null,
         spouseId,
         familyName: member.branch_name,
-        generation: member.generation,
+        generation: generations.get(member.id) ?? 1,
         name: member.name,
         nickName: member.nickname ?? undefined,
         relation: member.relation_label,
@@ -113,6 +179,9 @@ const replaceSimpleRelationships = (
   userId: string,
 ): void => {
   if (parentId !== undefined) {
+    if (parentId === memberId) {
+      throw new AppError(400, '成员不能设为自己的父母', 'INVALID_RELATED_MEMBER')
+    }
     db.prepare("DELETE FROM relationships WHERE family_id = ? AND to_member_id = ? AND type = 'parent'")
       .run(familyId, memberId)
     if (parentId) {
@@ -125,6 +194,9 @@ const replaceSimpleRelationships = (
   }
 
   if (spouseId !== undefined) {
+    if (spouseId === memberId) {
+      throw new AppError(400, '成员不能设为自己的配偶', 'INVALID_RELATED_MEMBER')
+    }
     db.prepare(`
       DELETE FROM relationships
       WHERE family_id = ? AND type = 'spouse' AND (from_member_id = ? OR to_member_id = ?)
@@ -267,11 +339,12 @@ app.post('/api/families/:familyId/members', (request: Request, response) => {
         created_by, created_at, updated_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
-      memberId, familyId, input.branchName, input.generation, input.name, input.nickName ?? null,
+      memberId, familyId, input.branchName, 1, input.name, input.nickName ?? null,
       input.relation, input.birthYear, input.gender, input.birthdayType, input.birthMonth,
       input.birthDay, input.isLeapMonth ? 1 : 0, authUser.id, timestamp, timestamp,
     )
     replaceSimpleRelationships(familyId, memberId, input.parentId, input.spouseId, authUser.id)
+    syncFamilyGenerations(familyId)
     db.prepare('UPDATE families SET updated_at = ? WHERE id = ?').run(timestamp, familyId)
     audit(familyId, authUser.id, 'create', 'member', memberId, { name: input.name })
   })
@@ -288,15 +361,16 @@ app.patch('/api/families/:familyId/members/:memberId', (request: Request, respon
   const timestamp = now()
   transaction(() => {
     db.prepare(`
-      UPDATE members SET branch_name = ?, generation = ?, name = ?, nickname = ?, relation_label = ?,
+      UPDATE members SET branch_name = ?, name = ?, nickname = ?, relation_label = ?,
         birth_year = ?, gender = ?, birthday_type = ?, birth_month = ?, birth_day = ?,
         is_leap_month = ?, updated_at = ? WHERE id = ? AND family_id = ?
     `).run(
-      input.branchName, input.generation, input.name, input.nickName ?? null, input.relation,
+      input.branchName, input.name, input.nickName ?? null, input.relation,
       input.birthYear, input.gender, input.birthdayType, input.birthMonth, input.birthDay,
       input.isLeapMonth ? 1 : 0, timestamp, memberId, familyId,
     )
     replaceSimpleRelationships(familyId, memberId, input.parentId, input.spouseId, authUser.id)
+    syncFamilyGenerations(familyId)
     db.prepare('UPDATE families SET updated_at = ? WHERE id = ?').run(timestamp, familyId)
     audit(familyId, authUser.id, 'update', 'member', memberId, { name: input.name })
   })
@@ -312,6 +386,7 @@ app.delete('/api/families/:familyId/members/:memberId', (request: Request, respo
   transaction(() => {
     db.prepare('UPDATE family_users SET linked_member_id = NULL WHERE linked_member_id = ?').run(memberId)
     db.prepare('DELETE FROM members WHERE id = ? AND family_id = ?').run(memberId, familyId)
+    syncFamilyGenerations(familyId)
     db.prepare('UPDATE families SET updated_at = ? WHERE id = ?').run(now(), familyId)
     audit(familyId, authUser.id, 'delete', 'member', memberId)
   })

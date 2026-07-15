@@ -24,6 +24,8 @@
 
 .stat-card {
   flex: 1;
+  min-width: 0;
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -37,6 +39,11 @@
 
   &--accent {
     background: rgba(212, 117, 106, 0.1);
+  }
+
+  &--pressed {
+    opacity: 0.72;
+    transform: scale(0.98);
   }
 }
 
