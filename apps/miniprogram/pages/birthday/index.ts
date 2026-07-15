@@ -4,6 +4,8 @@ import {
 } from '../../utils/familyData'
 import { copyToClipboard } from '../../utils/common'
 import { ensureFamilyData } from '../../services/familyStore'
+import { getBirthdaySubscriptionConfig } from '../../services/api'
+import { requestBirthdaySubscription } from '../../utils/subscription'
 
 interface MonthSection {
   label: string
@@ -32,6 +34,11 @@ Component({
     filterType: 'all' as 'all' | 'lunar' | 'solar',
     todayMembers: [] as MemberRow[],
     monthSections: [] as MonthSection[],
+    familyId: '',
+    subscriptionConfigured: false,
+    activeGrantCount: 0,
+    subscriptionMode: 'once' as 'once' | 'long_term',
+    subscribing: false,
     showModal: false,
     selectedMemberJson: '',
   },
@@ -48,7 +55,21 @@ Component({
   methods: {
     async buildList() {
       try {
-        await ensureFamilyData()
+        const snapshot = await ensureFamilyData()
+        const familyId = snapshot?.family.id ?? ''
+        this.setData({ familyId })
+        if (familyId) {
+          try {
+            const subscription = await getBirthdaySubscriptionConfig(familyId)
+            this.setData({
+              subscriptionConfigured: subscription.configured,
+              activeGrantCount: subscription.activeGrantCount,
+              subscriptionMode: subscription.subscriptionMode,
+            })
+          } catch {
+            this.setData({ subscriptionConfigured: false, activeGrantCount: 0 })
+          }
+        }
       const { keyword, filterType } = this.data
       const kw = keyword.trim().toLowerCase()
 
@@ -137,6 +158,24 @@ Component({
       const id = (e.currentTarget.dataset as { id: string }).id
       const member = familyMembers.find(m => m.id === id)
       if (member) copyToClipboard(buildBirthdayPrompt(member), '✅ 已复制祝福Prompt')
+    },
+
+    async subscribeBirthdayReminder() {
+      if (!this.data.familyId || this.data.subscribing) return
+      this.setData({ subscribing: true })
+      try {
+        const config = await requestBirthdaySubscription(this.data.familyId)
+        this.setData({
+          activeGrantCount: config.activeGrantCount,
+          subscriptionConfigured: config.configured,
+          subscriptionMode: config.subscriptionMode,
+        })
+        wx.showToast({ title: '订阅成功', icon: 'success' })
+      } catch (error) {
+        wx.showToast({ title: error instanceof Error ? error.message : '订阅失败', icon: 'none' })
+      } finally {
+        this.setData({ subscribing: false })
+      }
     },
 
     onModalClose() {

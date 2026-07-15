@@ -55,3 +55,7 @@ export const invitationSchema = z.object({
 export const linkMemberSchema = z.object({
   memberId: z.string().uuid().nullable(),
 })
+
+export const birthdaySubscriptionSchema = z.object({
+  templateId: z.string().trim().min(1).max(100),
+})

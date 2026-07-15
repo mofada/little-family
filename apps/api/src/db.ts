@@ -120,6 +120,31 @@ db.exec(`
     version INTEGER PRIMARY KEY,
     applied_at TEXT NOT NULL
   );
+
+  CREATE TABLE IF NOT EXISTS birthday_subscription_grants (
+    id TEXT PRIMARY KEY,
+    family_id TEXT NOT NULL REFERENCES families(id) ON DELETE CASCADE,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    template_id TEXT NOT NULL,
+    status TEXT NOT NULL CHECK(status IN ('active', 'consumed', 'failed')),
+    granted_at TEXT NOT NULL,
+    consumed_at TEXT
+  );
+  CREATE INDEX IF NOT EXISTS idx_birthday_grants_active
+    ON birthday_subscription_grants(family_id, user_id, status, granted_at);
+
+  CREATE TABLE IF NOT EXISTS birthday_reminder_deliveries (
+    id TEXT PRIMARY KEY,
+    family_id TEXT NOT NULL REFERENCES families(id) ON DELETE CASCADE,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    local_date TEXT NOT NULL,
+    member_names TEXT NOT NULL,
+    status TEXT NOT NULL CHECK(status IN ('pending', 'sent', 'failed')),
+    error_message TEXT,
+    created_at TEXT NOT NULL,
+    sent_at TEXT,
+    UNIQUE(family_id, user_id, local_date)
+  );
 `)
 
 // v1 removes the presentation-only "family branch" field and allows partial
@@ -180,3 +205,6 @@ if (needsMemberV1Migration) {
   db.prepare('INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (1, ?)')
     .run(new Date().toISOString())
 }
+
+db.prepare('INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (2, ?)')
+  .run(new Date().toISOString())

@@ -38,6 +38,32 @@
   gap: 12rpx;
 }
 
+.subscribe-panel {
+  margin-top: 16rpx;
+  padding: 18rpx;
+  border-radius: 20rpx;
+  background: linear-gradient(135deg, rgba(212,117,106,.12), rgba(168,134,108,.1));
+  display: flex;
+  align-items: center;
+  gap: 18rpx;
+}
+
+.subscribe-panel__info { flex: 1; }
+.subscribe-panel__title { display: block; font-size: 26rpx; font-weight: 700; color: var(--color-primary); }
+.subscribe-panel__sub { display: block; margin-top: 6rpx; font-size: 21rpx; color: var(--color-text-sub); }
+.subscribe-btn {
+  margin: 0;
+  padding: 0 20rpx;
+  min-width: 180rpx;
+  line-height: 64rpx;
+  border-radius: 9999rpx;
+  background: var(--color-accent);
+  color: #fff;
+  font-size: 22rpx;
+}
+.subscribe-btn[disabled] { background: #c8bdb6; color: #fff; }
+.subscribe-btn::after { border: 0; }
+
 .chip {
   padding: 10rpx 28rpx;
   border-radius: 9999rpx;

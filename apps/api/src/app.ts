@@ -7,8 +7,12 @@ import { config } from './config'
 import { db, transaction } from './db'
 import { createSession, requireAuth, requireFamilyRole, sha256 } from './auth'
 import { exchangeWechatCode } from './wechat'
-import { familySchema, invitationSchema, linkMemberSchema, loginSchema, memberSchema } from './schemas'
+import {
+  birthdaySubscriptionSchema, familySchema, invitationSchema,
+  linkMemberSchema, loginSchema, memberSchema,
+} from './schemas'
 import { AppError, type AuthenticatedRequest, type FamilyRole } from './types'
+import { BIRTHDAY_TEMPLATE } from './birthdayTemplate'
 
 const now = (): string => new Date().toISOString()
 
@@ -332,6 +336,45 @@ app.patch('/api/families/:familyId/me', (request: Request, response) => {
     UPDATE family_users SET linked_member_id = ? WHERE family_id = ? AND user_id = ?
   `).run(input.memberId, familyId, authUser.id)
   response.json({ linkedMemberId: input.memberId })
+})
+
+app.get('/api/families/:familyId/birthday-subscriptions/config', (request: Request, response) => {
+  const { authUser } = request as AuthenticatedRequest
+  const familyId = routeParam(request, 'familyId')
+  requireFamilyRole(authUser.id, familyId, 'viewer')
+  const row = db.prepare(`
+    SELECT COUNT(*) AS count FROM birthday_subscription_grants
+    WHERE family_id = ? AND user_id = ? AND template_id = ? AND status = 'active'
+  `).get(familyId, authUser.id, BIRTHDAY_TEMPLATE.id) as { count: number }
+  response.json({
+    configured: !!config.wechatAppId && !!config.wechatAppSecret,
+    templateId: BIRTHDAY_TEMPLATE.id,
+    activeGrantCount: row.count,
+    sendTime: '08:00',
+    timeZone: 'Asia/Shanghai',
+    subscriptionMode: BIRTHDAY_TEMPLATE.subscriptionMode,
+  })
+})
+
+app.post('/api/families/:familyId/birthday-subscriptions', (request: Request, response) => {
+  const { authUser } = request as AuthenticatedRequest
+  const familyId = routeParam(request, 'familyId')
+  requireFamilyRole(authUser.id, familyId, 'viewer')
+  if (!config.wechatAppId || !config.wechatAppSecret) {
+    throw new AppError(503, '生日提醒服务尚未启用', 'BIRTHDAY_REMINDER_DISABLED')
+  }
+  const input = birthdaySubscriptionSchema.parse(request.body)
+  if (input.templateId !== BIRTHDAY_TEMPLATE.id) {
+    throw new AppError(400, '订阅模板与服务端配置不一致', 'INVALID_SUBSCRIPTION_TEMPLATE')
+  }
+  const grantId = randomUUID()
+  db.prepare(`
+    INSERT INTO birthday_subscription_grants
+      (id, family_id, user_id, template_id, status, granted_at)
+    VALUES (?, ?, ?, ?, 'active', ?)
+  `).run(grantId, familyId, authUser.id, input.templateId, now())
+  audit(familyId, authUser.id, 'grant', 'birthday_subscription', grantId)
+  response.status(201).json({ grantId })
 })
 
 app.post('/api/families/:familyId/members', (request: Request, response) => {

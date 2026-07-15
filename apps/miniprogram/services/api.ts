@@ -147,3 +147,22 @@ export const acceptInvitation = async (code: string): Promise<string> => {
   setActiveFamilyId(result.familyId)
   return result.familyId
 }
+
+export interface BirthdaySubscriptionConfig {
+  configured: boolean
+  templateId: string
+  activeGrantCount: number
+  sendTime: string
+  timeZone: string
+  subscriptionMode: 'once' | 'long_term'
+}
+
+export const getBirthdaySubscriptionConfig = async (familyId: string): Promise<BirthdaySubscriptionConfig> => {
+  await ensureAuth()
+  return request(`/api/families/${familyId}/birthday-subscriptions/config`)
+}
+
+export const registerBirthdaySubscription = async (familyId: string, templateId: string): Promise<void> => {
+  await ensureAuth()
+  await request(`/api/families/${familyId}/birthday-subscriptions`, 'POST', { templateId })
+}

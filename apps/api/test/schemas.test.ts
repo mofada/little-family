@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { memberSchema } from '../src/schemas'
+import { getBeijingClock } from '../src/birthdayClock'
 
 const test = (name: string, run: () => void): void => {
   run()
@@ -68,4 +69,12 @@ test('拒绝不存在的公历日期和农历三十一日', () => {
     birthDay: 31,
   })
   assert.equal(invalidLunar.success, false)
+})
+
+test('生日任务始终按北京时间计算日期和八点', () => {
+  const clock = getBeijingClock(new Date('2026-07-15T00:00:00.000Z'))
+  assert.equal(clock.localDate, '2026-07-15')
+  assert.equal(clock.hour, 8)
+  assert.equal(clock.month, 7)
+  assert.equal(clock.day, 15)
 })

@@ -1,8 +1,8 @@
 import { familyMembers, getMemberColor, calculateAge } from '../../utils/familyData'
 import { ensureFamilyData } from '../../services/familyStore'
 
-const CARD_W = 186
-const CARD_H = 156
+const CARD_W = 210
+const CARD_H = 140
 const UNIT_GAP = 28
 const SPOUSE_GAP = 20
 const ROW_GAP = 228
