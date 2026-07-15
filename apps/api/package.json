@@ -2,7 +2,7 @@
   "name": "@little-family/api",
   "version": "0.1.0",
   "private": true,
-  "description": "小家谱微信小程序 MVP 后端",
+  "description": "小家记微信小程序 MVP 后端",
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc -p tsconfig.json",

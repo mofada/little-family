@@ -2,7 +2,7 @@
   "name": "@little-family/miniprogram",
   "version": "1.0.0",
   "private": true,
-  "description": "小家谱微信小程序前端",
+  "description": "小家记微信小程序前端",
   "scripts": {
     "check": "tsc -p tsconfig.json --noEmit"
   },

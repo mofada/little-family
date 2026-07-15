@@ -2,7 +2,7 @@
   "name": "little-family-monorepo",
   "version": "1.0.0",
   "private": true,
-  "description": "小家谱多端应用 Monorepo",
+  "description": "小家记多端应用 Monorepo",
   "workspaces": [
     "apps/api",
     "packages/*"
