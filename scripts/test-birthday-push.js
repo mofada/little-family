@@ -4,6 +4,7 @@ const https = require('node:https')
 const path = require('node:path')
 
 const TEMPLATE_ID = '4Hd2RmOKkWxhOzvP_ZTIKYaCiCorerofM0yPpydIdRg'
+const ROOT_DIR = path.resolve(__dirname, '..')
 
 const loadEnv = (file) => {
   if (!fs.existsSync(file)) return
@@ -21,8 +22,8 @@ const loadEnv = (file) => {
   }
 }
 
-loadEnv(path.join(__dirname, '.env'))
-loadEnv(path.join(__dirname, 'apps', 'api', '.env'))
+loadEnv(path.join(ROOT_DIR, '.env'))
+loadEnv(path.join(ROOT_DIR, 'apps', 'api', '.env'))
 
 const appId = process.env.WECHAT_APP_ID
 const appSecret = process.env.WECHAT_APP_SECRET

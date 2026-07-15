@@ -16,6 +16,7 @@
     "check": "npm run check:miniprogram && npm run check:api",
     "test:api": "npm run test --workspace @little-family/api",
     "test": "npm run test:api",
+    "import:family": "node scripts/import-family-data.mjs",
     "icons:generate": "node scripts/generate-tabbar-icons.js && node scripts/convert-tabbar-svg-to-png.js"
   },
   "devDependencies": {

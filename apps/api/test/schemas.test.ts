@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { memberSchema } from '../src/schemas'
+import { legacyFamilyImportSchema, memberSchema } from '../src/schemas'
 import { getBeijingClock } from '../src/birthdayClock'
 
 const test = (name: string, run: () => void): void => {
@@ -77,4 +77,21 @@ test('生日任务始终按北京时间计算日期和八点', () => {
   assert.equal(clock.hour, 8)
   assert.equal(clock.month, 7)
   assert.equal(clock.day, 15)
+})
+
+test('旧数据导入校验成员引用并允许关联当前用户', () => {
+  const parsed = legacyFamilyImportSchema.parse({
+    linkedLegacyId: 'child',
+    members: [
+      { ...baseMember, id: 'parent', name: '家长', parentId: null, spouseId: null },
+      { ...baseMember, id: 'child', name: '孩子', parentId: 'parent', spouseId: null },
+    ],
+  })
+  assert.equal(parsed.members.length, 2)
+  assert.equal(parsed.linkedLegacyId, 'child')
+
+  const missingReference = legacyFamilyImportSchema.safeParse({
+    members: [{ ...baseMember, id: 'child', parentId: 'missing', spouseId: null }],
+  })
+  assert.equal(missingReference.success, false)
 })

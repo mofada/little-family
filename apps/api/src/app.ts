@@ -9,7 +9,7 @@ import { createSession, requireAuth, requireFamilyRole, sha256 } from './auth'
 import { exchangeWechatCode } from './wechat'
 import {
   birthdaySubscriptionSchema, familySchema, invitationSchema,
-  linkMemberSchema, loginSchema, memberSchema,
+  legacyFamilyImportSchema, linkMemberSchema, loginSchema, memberSchema,
 } from './schemas'
 import { AppError, type AuthenticatedRequest, type FamilyRole } from './types'
 import { BIRTHDAY_TEMPLATE } from './birthdayTemplate'
@@ -460,6 +460,80 @@ app.post('/api/families/:familyId/members', (request: Request, response) => {
     audit(familyId, authUser.id, 'create', 'member', memberId, { name: input.name })
   })
   response.status(201).json({ memberId, ...getSnapshot(familyId) })
+})
+
+app.post('/api/families/:familyId/import-legacy', (request: Request, response) => {
+  const { authUser } = request as AuthenticatedRequest
+  const familyId = routeParam(request, 'familyId')
+  requireFamilyRole(authUser.id, familyId, 'owner')
+  const input = legacyFamilyImportSchema.parse(request.body)
+  const timestamp = now()
+  const idMap = new Map(input.members.map(member => [member.id, randomUUID()]))
+
+  transaction(() => {
+    const existing = db.prepare('SELECT COUNT(*) AS count FROM members WHERE family_id = ?')
+      .get(familyId) as { count: number }
+    if (existing.count > 0) {
+      throw new AppError(409, '仅可向空家庭导入旧数据', 'FAMILY_NOT_EMPTY')
+    }
+
+    const insertMember = db.prepare(`
+      INSERT INTO members (
+        id, family_id, generation, name, nickname, relation_label,
+        birth_year, gender, birthday_type, birth_month, birth_day, is_leap_month,
+        created_by, created_at, updated_at
+      ) VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `)
+    input.members.forEach(member => {
+      insertMember.run(
+        idMap.get(member.id)!, familyId, member.name, member.nickName ?? null, member.relation,
+        member.birthYear, member.gender, member.birthdayType, member.birthMonth, member.birthDay,
+        member.isLeapMonth ? 1 : 0, authUser.id, timestamp, timestamp,
+      )
+    })
+
+    const insertRelationship = db.prepare(`
+      INSERT INTO relationships
+        (id, family_id, from_member_id, to_member_id, type, created_by, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `)
+    input.members.forEach(member => {
+      if (member.parentId) {
+        insertRelationship.run(
+          randomUUID(), familyId, idMap.get(member.parentId)!, idMap.get(member.id)!,
+          'parent', authUser.id, timestamp,
+        )
+      }
+    })
+
+    const importedSpouses = new Set<string>()
+    input.members.forEach(member => {
+      if (!member.spouseId) return
+      const legacyPair = [member.id, member.spouseId].sort()
+      const pairKey = legacyPair.join('\u0000')
+      if (importedSpouses.has(pairKey)) return
+      importedSpouses.add(pairKey)
+      const memberPair = legacyPair.map(legacyId => idMap.get(legacyId)!).sort()
+      insertRelationship.run(
+        randomUUID(), familyId, memberPair[0], memberPair[1],
+        'spouse', authUser.id, timestamp,
+      )
+    })
+
+    syncFamilyGenerations(familyId)
+    if (input.linkedLegacyId) {
+      db.prepare(`
+        UPDATE family_users SET linked_member_id = ? WHERE family_id = ? AND user_id = ?
+      `).run(idMap.get(input.linkedLegacyId)!, familyId, authUser.id)
+    }
+    db.prepare('UPDATE families SET updated_at = ? WHERE id = ?').run(timestamp, familyId)
+    audit(familyId, authUser.id, 'import', 'family', familyId, { memberCount: input.members.length })
+  })
+
+  response.status(201).json({
+    memberCount: input.members.length,
+    linkedMemberId: input.linkedLegacyId ? idMap.get(input.linkedLegacyId) : null,
+  })
 })
 
 app.patch('/api/families/:familyId/members/:memberId', (request: Request, response) => {

@@ -114,6 +114,31 @@ API 数据默认位于 `apps/api/data/little-family.db`，包含用户 OpenID、
 - 所有写操作由 API 重新校验 owner/admin/editor/viewer 角色。
 - 生产环境必须设置 `ALLOW_DEV_LOGIN=false`。
 
+### 导入旧版写死数据
+
+仓库级命令 `npm run import:family` 可以把旧版成员数组导入现有家庭。导入由 API 在单个事务中完成，仅允许家庭所有者操作，并且目标家庭必须没有成员。旧版 `parentId` 会转换成当前的 `parentIds`，成员 ID 会重新生成 UUID；`generation` 根据关系重新推导，已取消的 `familyName` 分支字段不会入库。
+
+先部署并重启最新 API，在小程序中登录、创建一个空家庭，然后从微信开发者工具控制台取得当前家庭 ID 和登录令牌：
+
+```js
+wx.getStorageSync('little-family:active-family-id')
+wx.getStorageSync('little-family:token')
+```
+
+在本机 PowerShell 中执行：
+
+```powershell
+$env:LITTLE_FAMILY_TOKEN = '刚取得的登录令牌'
+npm run import:family -- `
+  --file 'C:\path\to\family-data.json' `
+  --api 'https://family.mofada.cn' `
+  --family-id '目标家庭UUID' `
+  --link-id '代表当前登录用户的旧成员ID'
+Remove-Item Env:LITTLE_FAMILY_TOKEN
+```
+
+导入前备份 SQLite 数据目录。成员数组包含真实家庭资料时应保存在仓库外，不能提交到 Git。若导入失败，API 会回滚整批数据并返回校验原因；修改数据后仍使用同一个空家庭重新执行。
+
 ## PM2 部署
 
 先在本地构建：

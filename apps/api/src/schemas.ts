@@ -46,6 +46,75 @@ export const memberSchema = z.object({
   }
 })
 
+const legacyMemberSchema = z.object({
+  id: z.string().trim().min(1).max(100),
+  parentId: z.string().trim().min(1).max(100).nullable().optional().default(null),
+  spouseId: z.string().trim().min(1).max(100).nullable().optional().default(null),
+  // 旧版展示字段仅用于兼容输入，当前模型会根据关系重新推导代际且不保存家族分支。
+  familyName: z.string().trim().max(30).optional(),
+  generation: z.number().int().min(1).max(20).optional(),
+  name: z.string().trim().min(1).max(30),
+  nickName: optionalTrimmed,
+  relation: z.string().trim().max(20).optional().default(''),
+  birthYear: z.number().int().min(1800).max(2200).nullable(),
+  gender: z.enum(['male', 'female', 'unknown']),
+  birthdayType: z.enum(['solar', 'lunar']).nullable(),
+  birthMonth: z.number().int().min(1).max(12).nullable(),
+  birthDay: z.number().int().min(1).max(31).nullable(),
+  isLeapMonth: z.boolean().optional().default(false),
+}).superRefine((input, context) => {
+  const parsed = memberSchema.safeParse({
+    ...input,
+    parentIds: [],
+    spouseId: null,
+  })
+  if (!parsed.success) {
+    parsed.error.issues.forEach(issue => context.addIssue({
+      code: 'custom',
+      message: issue.message,
+      path: issue.path,
+    }))
+  }
+})
+
+export const legacyFamilyImportSchema = z.object({
+  members: z.array(legacyMemberSchema).min(1).max(500),
+  linkedLegacyId: z.string().trim().min(1).max(100).optional(),
+}).superRefine((input, context) => {
+  const ids = new Set<string>()
+  input.members.forEach((member, index) => {
+    if (ids.has(member.id)) {
+      context.addIssue({ code: 'custom', message: `旧成员 ID 重复：${member.id}`, path: ['members', index, 'id'] })
+    }
+    ids.add(member.id)
+  })
+
+  input.members.forEach((member, index) => {
+    if (member.parentId && !ids.has(member.parentId)) {
+      context.addIssue({ code: 'custom', message: `父母 ID 不存在：${member.parentId}`, path: ['members', index, 'parentId'] })
+    }
+    if (member.spouseId && !ids.has(member.spouseId)) {
+      context.addIssue({ code: 'custom', message: `配偶 ID 不存在：${member.spouseId}`, path: ['members', index, 'spouseId'] })
+    }
+    if (member.parentId === member.id || member.spouseId === member.id) {
+      context.addIssue({ code: 'custom', message: '成员不能关联自己', path: ['members', index] })
+    }
+  })
+
+  const byId = new Map(input.members.map(member => [member.id, member]))
+  input.members.forEach((member, index) => {
+    if (!member.spouseId) return
+    const reverse = byId.get(member.spouseId)?.spouseId
+    if (reverse && reverse !== member.id) {
+      context.addIssue({ code: 'custom', message: `配偶关系冲突：${member.id}、${member.spouseId}`, path: ['members', index, 'spouseId'] })
+    }
+  })
+
+  if (input.linkedLegacyId && !ids.has(input.linkedLegacyId)) {
+    context.addIssue({ code: 'custom', message: '要关联到登录用户的旧成员 ID 不存在', path: ['linkedLegacyId'] })
+  }
+})
+
 export const invitationSchema = z.object({
   role: z.enum(['admin', 'editor', 'viewer']).default('editor'),
   maxUses: z.number().int().min(1).max(20).default(1),
