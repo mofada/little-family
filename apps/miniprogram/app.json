@@ -2,6 +2,7 @@
   "pages": [
     "pages/home/index",
     "pages/tree/index",
+    "pages/timeline/index",
     "pages/birthday/index",
     "pages/profile/index",
     "pages/family-manage/index",
@@ -24,6 +25,12 @@
         "text": "图谱",
         "iconPath": "assets/tabbar/tree.png",
         "selectedIconPath": "assets/tabbar/tree-active.png"
+      },
+      {
+        "pagePath": "pages/timeline/index",
+        "text": "时间轴",
+        "iconPath": "assets/tabbar/timeline.png",
+        "selectedIconPath": "assets/tabbar/timeline-active.png"
       },
       {
         "pagePath": "pages/birthday/index",

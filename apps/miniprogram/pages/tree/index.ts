@@ -1,414 +1,217 @@
 import { familyMembers, getMemberColor, calculateAge } from '../../utils/familyData'
 import { ensureFamilyData } from '../../services/familyStore'
 
-const CARD_W = 210
-const CARD_H = 140
-const UNIT_GAP = 28
-const SPOUSE_GAP = 20
-const ROW_GAP = 228
-const PAD_X = 60
-const PAD_Y = 44
-const LINE_W = 4
-
 type Member = typeof familyMembers[number]
 
-interface MemberNode {
+interface PersonCard {
   id: string
   memberJson: string
   name: string
   relation: string
+  meta: string
+  avatarText: string
   color: string
-  age: number | null
-  avatarEmoji: string
+  background: string
   isMe: boolean
-  left: number
-  top: number
 }
 
-interface EdgeSegment {
-  left: number
-  top: number
-  width: number
-  height: number
-  color: string
-  opacity: number
-}
-
-interface Unit {
-  key: string
-  members: Member[]
+interface GenerationTab {
   generation: number
-  parentRefId: string | null
+  label: string
+  count: number
+  active: boolean
 }
-
-interface UnitLayout extends Unit {
-  left: number
-  top: number
-  width: number
-  centerX: number
-}
-
-let buildTimer: number | null = null
 
 Component({
   data: {
     keyword: '',
-    nodes: [] as MemberNode[],
-    edgeSegments: [] as EdgeSegment[],
-    canvasWidth: 750,
-    canvasHeight: 1200,
-    visibleCount: 0,
-    totalCount: familyMembers.length,
+    totalCount: 0,
+    generationCount: 0,
+    currentMemberId: '',
+    focusId: '',
+    focus: null as PersonCard | null,
+    focusMemberJson: '',
+    parents: [] as PersonCard[],
+    spouse: null as PersonCard | null,
+    children: [] as PersonCard[],
+    siblings: [] as PersonCard[],
+    searchResults: [] as PersonCard[],
+    generationTabs: [] as GenerationTab[],
+    selectedGeneration: 0,
+    generationMembers: [] as PersonCard[],
     showModal: false,
     selectedMemberJson: '',
-    currentMemberId: '',
   },
 
   lifetimes: {
     attached() {
-      void this.refreshGraph()
+      void this.refreshFamily()
     },
-    detached() {
-      if (buildTimer !== null) {
-        clearTimeout(buildTimer)
-        buildTimer = null
-      }
-    }
   },
 
   pageLifetimes: {
     show() {
-      void this.refreshGraph()
-    }
+      void this.refreshFamily()
+    },
   },
 
   methods: {
-    async refreshGraph() {
+    async refreshFamily() {
       try {
         const snapshot = await ensureFamilyData()
         const currentMemberId = snapshot?.family.linkedMemberId
           ?? familyMembers.find(member => member.relation === '我自己')?.id
           ?? familyMembers[0]?.id
           ?? ''
-        this.setData({ currentMemberId })
-        this.buildGraph()
+        const previousFocusExists = familyMembers.some(member => member.id === this.data.focusId)
+        const focusId = previousFocusExists ? this.data.focusId : currentMemberId
+        const focusMember = familyMembers.find(member => member.id === focusId)
+        this.setData({
+          currentMemberId,
+          focusId,
+          selectedGeneration: focusMember?.generation ?? 0,
+        }, () => this.buildView())
       } catch (error) {
         wx.showToast({ title: error instanceof Error ? error.message : '加载失败', icon: 'none' })
       }
     },
-    scheduleBuild(delay = 0) {
-      if (buildTimer !== null) {
-        clearTimeout(buildTimer)
+
+    toCard(member: Member): PersonCard {
+      const color = getMemberColor(member)
+      const age = calculateAge(member.birthYear)
+      const details = [member.nickName, age === null ? '' : `${age}岁`].filter(Boolean)
+      return {
+        id: member.id,
+        memberJson: JSON.stringify(member),
+        name: member.name,
+        relation: member.relation || '家人',
+        meta: details.join(' · ') || '资料待完善',
+        avatarText: member.name.trim().slice(-1) || '家',
+        color,
+        background: `${color}16`,
+        isMe: member.id === this.data.currentMemberId,
       }
-      buildTimer = setTimeout(() => {
-        buildTimer = null
-        this.buildGraph()
-      }, delay)
     },
 
-    buildGraph() {
-      const keyword = this.data.keyword.trim().toLowerCase()
-      const memberById = new Map(familyMembers.map(m => [m.id, m]))
+    buildView() {
+      const memberById = new Map(familyMembers.map(member => [member.id, member]))
+      const focusMember = memberById.get(this.data.focusId)
+      const generations = [...new Set(familyMembers.map(member => member.generation))].sort((a, b) => a - b)
+      const selectedGeneration = generations.includes(this.data.selectedGeneration)
+        ? this.data.selectedGeneration
+        : (focusMember?.generation ?? generations[0] ?? 0)
+      const generationTabs = generations.map(generation => ({
+        generation,
+        label: `第 ${generation} 代`,
+        count: familyMembers.filter(member => member.generation === generation).length,
+        active: generation === selectedGeneration,
+      }))
 
-      const directMatchedIds = new Set<string>(
-        familyMembers
-          .filter(m => {
-            if (!keyword) return true
-            return [m.name, m.relation, m.nickName ?? '']
-              .join('|')
-              .toLowerCase()
-              .includes(keyword)
-          })
-          .map(m => m.id)
-      )
-
-      const visibleIds = new Set<string>()
-      const addVisible = (id: string | null | undefined) => {
-        if (!id) return
-        const member = memberById.get(id)
-        if (!member) return
-        visibleIds.add(id)
-      }
-
-      directMatchedIds.forEach(id => addVisible(id))
-
-      // 搜索时保留一层亲缘上下文，避免图谱断裂成无意义碎片
-      if (keyword) {
-        Array.from(directMatchedIds).forEach(id => {
-          const member = memberById.get(id)
-          if (!member) return
-
-          addVisible(member.spouseId)
-          member.parentIds.forEach(parentId => {
-            addVisible(parentId)
-            addVisible(memberById.get(parentId)?.spouseId)
-          })
-
-          familyMembers.forEach(candidate => {
-            if (candidate.parentIds.includes(id) || (!!member.spouseId && candidate.parentIds.includes(member.spouseId))) {
-              addVisible(candidate.id)
-            }
-          })
+      if (!focusMember) {
+        this.setData({
+          totalCount: familyMembers.length,
+          generationCount: generations.length,
+          focus: null,
+          parents: [],
+          spouse: null,
+          children: [],
+          siblings: [],
+          generationTabs,
+          generationMembers: [],
         })
+        return
       }
 
-      const visibleMembers = familyMembers.filter(m => visibleIds.has(m.id))
-
-      const { units } = this.buildUnits(visibleMembers)
-      const layouts = this.layoutUnits(units)
-      const { nodes, edgeSegments, canvasWidth, canvasHeight } = this.buildGraphPrimitives(layouts)
+      const spouseMember = focusMember.spouseId ? memberById.get(focusMember.spouseId) : undefined
+      const familyParentIds = new Set(focusMember.parentIds)
+      const parents = focusMember.parentIds
+        .map(parentId => memberById.get(parentId))
+        .filter((member): member is Member => member !== undefined)
+      const children = familyMembers.filter(member =>
+        member.parentIds.includes(focusMember.id)
+          || (!!spouseMember && member.parentIds.includes(spouseMember.id)))
+      const siblings = familyMembers.filter(member =>
+        member.id !== focusMember.id
+          && member.id !== spouseMember?.id
+          && member.parentIds.some(parentId => familyParentIds.has(parentId)))
 
       this.setData({
-        nodes,
-        edgeSegments,
-        canvasWidth,
-        canvasHeight,
-        visibleCount: nodes.length,
         totalCount: familyMembers.length,
+        generationCount: generations.length,
+        selectedGeneration,
+        focus: this.toCard(focusMember),
+        focusMemberJson: JSON.stringify(focusMember),
+        parents: parents.map(member => this.toCard(member)),
+        spouse: spouseMember ? this.toCard(spouseMember) : null,
+        children: children.map(member => this.toCard(member)),
+        siblings: siblings.map(member => this.toCard(member)),
+        generationTabs,
+        generationMembers: familyMembers
+          .filter(member => member.generation === selectedGeneration)
+          .map(member => this.toCard(member)),
       })
     },
 
-    buildUnits(visibleMembers: Member[]) {
-      const visibleById = new Map(visibleMembers.map(m => [m.id, m]))
-      const used = new Set<string>()
-      const units: Unit[] = []
-      const memberToUnit = new Map<string, string>()
-
-      const ordered = [...visibleMembers].sort((a, b) => {
-        if (a.generation !== b.generation) return a.generation - b.generation
-        return a.id.localeCompare(b.id)
-      })
-
-      ordered.forEach(member => {
-        if (used.has(member.id)) return
-
-        const spouse = member.spouseId ? visibleById.get(member.spouseId) : undefined
-        let members: Member[] = [member]
-
-        if (spouse && !used.has(spouse.id)) {
-          members = [member, spouse].sort((a, b) => {
-            const aPrimary = a.parentIds.length > 0
-            const bPrimary = b.parentIds.length > 0
-            if (aPrimary !== bPrimary) return aPrimary ? -1 : 1
-            return a.id.localeCompare(b.id)
-          })
-        }
-
-        const key = members.map(m => m.id).sort().join('_')
-        const generation = Math.min(...members.map(m => m.generation))
-        const parentRefId = members.find(m => m.parentIds.length > 0)?.parentIds[0] ?? null
-
-        units.push({ key, members, generation, parentRefId })
-
-        members.forEach(m => {
-          used.add(m.id)
-          memberToUnit.set(m.id, key)
-        })
-      })
-
-      return { units, memberToUnit }
+    buildSearchResults(keyword: string) {
+      const normalized = keyword.trim().toLowerCase()
+      const searchResults = normalized
+        ? familyMembers
+            .filter(member => [member.name, member.nickName ?? '', member.relation]
+              .join('|')
+              .toLowerCase()
+              .includes(normalized))
+            .slice(0, 12)
+            .map(member => this.toCard(member))
+        : []
+      this.setData({ searchResults })
     },
 
-    layoutUnits(units: Unit[]) {
-      const grouped = new Map<number, Unit[]>()
-      units.forEach(u => {
-        if (!grouped.has(u.generation)) grouped.set(u.generation, [])
-        grouped.get(u.generation)!.push(u)
-      })
-
-      const generations = Array.from(grouped.keys()).sort((a, b) => a - b)
-      const minGeneration = generations[0] ?? 1
-      const layoutsByKey = new Map<string, UnitLayout>()
-      const memberCenterX = new Map<string, number>()
-
-      generations.forEach(generation => {
-        const rowUnits = grouped.get(generation) ?? []
-
-        const withDesiredCenter = rowUnits.map(unit => {
-          const parentCenters = unit.members
-            .flatMap(m => m.parentIds.map(parentId => memberCenterX.get(parentId)))
-            .filter((x): x is number => typeof x === 'number')
-
-          const desiredCenter = parentCenters.length > 0
-            ? parentCenters.reduce((sum, x) => sum + x, 0) / parentCenters.length
-            : null
-
-          return { unit, desiredCenter }
-        })
-
-        withDesiredCenter.sort((a, b) => {
-          if (a.desiredCenter !== null && b.desiredCenter !== null) return a.desiredCenter - b.desiredCenter
-          if (a.desiredCenter !== null) return -1
-          if (b.desiredCenter !== null) return 1
-          return a.unit.key.localeCompare(b.unit.key)
-        })
-
-        let cursorX = PAD_X
-        const rowTop = PAD_Y + (generation - minGeneration) * ROW_GAP
-        const rowLayouts: UnitLayout[] = []
-
-        withDesiredCenter.forEach(({ unit, desiredCenter }) => {
-          const width = unit.members.length * CARD_W + Math.max(unit.members.length - 1, 0) * SPOUSE_GAP
-          const preferredLeft = desiredCenter !== null ? Math.floor(desiredCenter - width / 2) : cursorX
-          const left = Math.max(cursorX, preferredLeft)
-          const centerX = left + width / 2
-
-          const layout: UnitLayout = {
-            ...unit,
-            left,
-            top: rowTop,
-            width,
-            centerX,
-          }
-
-          rowLayouts.push(layout)
-          cursorX = left + width + UNIT_GAP
-        })
-
-        const rowDesiredCenters = withDesiredCenter
-          .map(x => x.desiredCenter)
-          .filter((x): x is number => x !== null)
-
-        if (rowLayouts.length > 0 && rowDesiredCenters.length > 0) {
-          const minLeft = Math.min(...rowLayouts.map(l => l.left))
-          const maxRight = Math.max(...rowLayouts.map(l => l.left + l.width))
-          const rowCenter = (minLeft + maxRight) / 2
-          const desiredCenter = rowDesiredCenters.reduce((sum, x) => sum + x, 0) / rowDesiredCenters.length
-          const shift = Math.round(desiredCenter - rowCenter)
-
-          if (shift !== 0 && minLeft + shift >= PAD_X) {
-            rowLayouts.forEach(layout => {
-              layout.left += shift
-              layout.centerX += shift
-            })
-          }
-        }
-
-        rowLayouts.forEach(layout => {
-          layoutsByKey.set(layout.key, layout)
-          layout.members.forEach((member, index) => {
-            const centerX = layout.left + index * (CARD_W + SPOUSE_GAP) + CARD_W / 2
-            memberCenterX.set(member.id, centerX)
-          })
-        })
-      })
-
-      return Array.from(layoutsByKey.values())
+    onSearch(event: WechatMiniprogram.Input) {
+      const keyword = event.detail.value
+      this.setData({ keyword })
+      this.buildSearchResults(keyword)
     },
 
-    buildGraphPrimitives(layouts: UnitLayout[]) {
+    onClearSearch() {
+      this.setData({ keyword: '', searchResults: [] })
+    },
 
-      const nodes: MemberNode[] = []
-      let maxRight = 750
-      let maxBottom = 1200
+    onFocusMember(event: WechatMiniprogram.TouchEvent) {
+      const id = (event.currentTarget.dataset as { id: string }).id
+      const member = familyMembers.find(candidate => candidate.id === id)
+      if (!member) return
+      this.setData({
+        focusId: id,
+        selectedGeneration: member.generation,
+        keyword: '',
+        searchResults: [],
+      }, () => this.buildView())
+    },
 
-      layouts.forEach(layout => {
-        layout.members.forEach((member, index) => {
-          const left = layout.left + index * (CARD_W + SPOUSE_GAP)
-          const top = layout.top
-
-          nodes.push({
-            id: member.id,
-            memberJson: JSON.stringify(member),
-            name: member.name,
-            relation: member.relation,
-            color: getMemberColor(member),
-            age: calculateAge(member.birthYear),
-            avatarEmoji: member.gender === 'male' ? '👨' : member.gender === 'female' ? '👩' : '👤',
-            isMe: member.id === this.data.currentMemberId,
-            left,
-            top,
-          })
-
-          maxRight = Math.max(maxRight, left + CARD_W + PAD_X)
-          maxBottom = Math.max(maxBottom, top + CARD_H + PAD_Y)
-        })
-      })
-
-      const edgeSegments: EdgeSegment[] = []
-      const memberPos = new Map<string, { centerX: number; top: number; centerY: number }>()
-      const pushSegment = (left: number, top: number, width: number, height: number, color: string, opacity = 0.35) => {
-        if (width <= 0 || height <= 0) return
-        edgeSegments.push({ left, top, width, height, color, opacity })
+    onBackToMe() {
+      if (!this.data.currentMemberId) {
+        wx.showToast({ title: '暂未关联家庭成员', icon: 'none' })
+        return
       }
-
-      layouts.forEach(layout => {
-        layout.members.forEach((member, index) => {
-          const left = layout.left + index * (CARD_W + SPOUSE_GAP)
-          memberPos.set(member.id, {
-            centerX: left + CARD_W / 2,
-            top: layout.top,
-            centerY: layout.top + CARD_H / 2,
-          })
-        })
-      })
-
-      layouts.forEach(layout => {
-        layout.members.forEach(member => {
-          member.parentIds.forEach(parentId => {
-          const parentPos = memberPos.get(parentId)
-          const childPos = memberPos.get(member.id)
-          if (!parentPos || !childPos) return
-
-          const fromX = parentPos.centerX
-          const fromY = parentPos.top + CARD_H
-          const toX = childPos.centerX
-          const toY = childPos.top
-          if (toY <= fromY) return
-
-          const midY = Math.floor((fromY + toY) / 2)
-          const color = getMemberColor(member)
-
-          pushSegment(fromX - LINE_W / 2, fromY, LINE_W, midY - fromY, color)
-
-          const hLeft = Math.min(fromX, toX)
-          const hWidth = Math.max(Math.abs(toX - fromX), LINE_W)
-          pushSegment(hLeft, midY - LINE_W / 2, hWidth, LINE_W, color)
-
-          pushSegment(toX - LINE_W / 2, midY, LINE_W, toY - midY, color)
-          })
-        })
-      })
-
-      const spouseDone = new Set<string>()
-      layouts.forEach(layout => {
-        layout.members.forEach(member => {
-          if (!member.spouseId) return
-          if (!memberPos.has(member.spouseId)) return
-          const key = [member.id, member.spouseId].sort().join('_')
-          if (spouseDone.has(key)) return
-          spouseDone.add(key)
-
-          const leftPos = memberPos.get(member.id)
-          const rightPos = memberPos.get(member.spouseId)
-          if (!leftPos || !rightPos) return
-
-          const y = Math.round((leftPos.centerY + rightPos.centerY) / 2)
-          const left = Math.min(leftPos.centerX, rightPos.centerX)
-          const width = Math.max(Math.abs(rightPos.centerX - leftPos.centerX), LINE_W)
-          pushSegment(left, y - LINE_W / 2, width, LINE_W, getMemberColor(member), 0.25)
-        })
-      })
-
-      return {
-        nodes,
-        edgeSegments,
-        canvasWidth: maxRight,
-        canvasHeight: maxBottom,
-      }
+      const member = familyMembers.find(candidate => candidate.id === this.data.currentMemberId)
+      this.setData({
+        focusId: this.data.currentMemberId,
+        selectedGeneration: member?.generation ?? this.data.selectedGeneration,
+      }, () => this.buildView())
     },
 
-    onSearch(e: WechatMiniprogram.Input) {
-      this.setData({ keyword: e.detail.value }, () => this.scheduleBuild(120))
+    onSelectGeneration(event: WechatMiniprogram.TouchEvent) {
+      const generation = Number((event.currentTarget.dataset as { generation: number }).generation)
+      this.setData({ selectedGeneration: generation }, () => this.buildView())
     },
 
-    onCardTap(e: WechatMiniprogram.TouchEvent) {
-      const json = (e.currentTarget.dataset as { json: string }).json
-      this.setData({ showModal: true, selectedMemberJson: json })
+    onOpenFocusModal() {
+      if (!this.data.focusMemberJson) return
+      this.setData({ showModal: true, selectedMemberJson: this.data.focusMemberJson })
     },
 
     onModalClose() {
       this.setData({ showModal: false, selectedMemberJson: '' })
     },
-  }
+  },
 })

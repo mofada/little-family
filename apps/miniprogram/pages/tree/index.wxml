@@ -1,60 +1,224 @@
 <view class="page">
-  <navigation-bar title="族谱树" back="{{false}}" color="black" background="#f7f3ef" />
+  <navigation-bar title="族谱" back="{{false}}" color="black" background="#f8f4f0" />
 
-  <view class="toolbar">
-    <view class="search-box">
-      <text class="search-icon">🔍</text>
-      <input
-        class="search-input"
-        placeholder="搜索成员姓名或称呼…"
-        value="{{keyword}}"
-        bindinput="onSearch"
-      />
-    </view>
-    <view class="toolbar-foot">
-      <text class="toolbar-stat">当前展示 {{visibleCount}} / {{totalCount}} 人</text>
-    </view>
-  </view>
+  <scroll-view class="page-scroll" scroll-y enhanced show-scrollbar="{{false}}">
+    <view class="hero">
+      <view class="hero__ornament hero__ornament--one" />
+      <view class="hero__ornament hero__ornament--two" />
+      <text class="hero__eyebrow">OUR FAMILY</text>
+      <text class="hero__title">一家人的故事</text>
+      <text class="hero__subtitle">已记录 {{totalCount}} 位家人 · {{generationCount}} 代传承</text>
 
-  <scroll-view class="page__list" scroll-x scroll-y enhanced show-scrollbar="{{false}}">
-    <view wx:if="{{nodes.length === 0}}" class="empty-state">
-      <text class="empty-state__emoji">🧭</text>
-      <text class="empty-state__title">没有找到匹配成员</text>
-      <text class="empty-state__sub">尝试清空搜索词</text>
-    </view>
+      <view class="search-box">
+        <text class="search-box__icon">⌕</text>
+        <input
+          class="search-box__input"
+          placeholder="输入姓名、昵称或称呼"
+          placeholder-class="search-placeholder"
+          value="{{keyword}}"
+          bindinput="onSearch"
+          confirm-type="search"
+        />
+        <view wx:if="{{keyword}}" class="search-box__clear" bindtap="onClearSearch"><text>×</text></view>
+      </view>
 
-    <view wx:else class="graph-canvas" style="width: {{canvasWidth}}rpx; height: {{canvasHeight}}rpx;">
-      <view
-        wx:for="{{edgeSegments}}"
-        wx:key="index"
-        class="edge-segment"
-        style="left: {{item.left}}rpx; top: {{item.top}}rpx; width: {{item.width}}rpx; height: {{item.height}}rpx; background: {{item.color}}; opacity: {{item.opacity}};"
-      />
-
-      <view
-        wx:for="{{nodes}}"
-        wx:key="id"
-        class="node-card {{item.isMe ? 'node-card--me' : ''}}"
-        style="left: {{item.left}}rpx; top: {{item.top}}rpx; border-color: {{item.color}}55;"
-        bindtap="onCardTap"
-        data-json="{{item.memberJson}}"
-      >
-        <view class="node-main">
-          <view class="node-avatar" style="background: {{item.color}}1f;">
-            <text>{{item.avatarEmoji}}</text>
+      <view wx:if="{{keyword}}" class="search-panel">
+        <view wx:if="{{searchResults.length === 0}}" class="search-empty"><text>没有找到匹配的家人</text></view>
+        <view
+          wx:for="{{searchResults}}"
+          wx:key="id"
+          class="search-result"
+          data-id="{{item.id}}"
+          bindtap="onFocusMember"
+          hover-class="tap--pressed"
+        >
+          <view class="mini-avatar" style="color: {{item.color}}; background: {{item.background}};"><text>{{item.avatarText}}</text></view>
+          <view class="search-result__body">
+            <text class="search-result__name">{{item.name}}</text>
+            <text class="search-result__meta">{{item.relation}} · {{item.meta}}</text>
           </view>
-          <view class="node-info">
-            <view class="node-name-row">
-              <text class="node-name">{{item.name}}</text>
-              <view wx:if="{{item.isMe}}" class="me-badge"><text>我</text></view>
-            </view>
-            <text class="node-sub">{{item.relation}}</text>
-          </view>
-        </view>
-        <view class="node-foot">
-          <text class="age-tag">{{item.age !== null ? item.age + '岁' : '未知'}}</text>
+          <text class="search-result__action">查看关系</text>
         </view>
       </view>
+    </view>
+
+    <view wx:if="{{focus}}" class="content">
+      <view class="focus-toolbar">
+        <view>
+          <text class="section-eyebrow">当前中心人物</text>
+          <text class="focus-toolbar__name">{{focus.name}}的家庭</text>
+        </view>
+        <view wx:if="{{focus.id !== currentMemberId}}" class="back-me" bindtap="onBackToMe" hover-class="tap--pressed">
+          <text>回到我</text>
+        </view>
+      </view>
+
+      <view class="family-stage">
+        <view class="relation-section relation-section--parents">
+          <text class="relation-caption">上一代 · 父母</text>
+          <view wx:if="{{parents.length}}" class="relative-row">
+            <view
+              wx:for="{{parents}}"
+              wx:key="id"
+              class="relative-card"
+              data-id="{{item.id}}"
+              bindtap="onFocusMember"
+              hover-class="tap--pressed"
+            >
+              <view class="relative-avatar" style="color: {{item.color}}; background: {{item.background}};"><text>{{item.avatarText}}</text></view>
+              <text class="relative-name">{{item.name}}</text>
+              <text class="relative-meta">{{item.relation}}</text>
+              <view wx:if="{{item.isMe}}" class="you-badge"><text>我</text></view>
+            </view>
+          </view>
+          <view wx:else class="unrecorded"><text>父母信息暂未记录</text></view>
+        </view>
+
+        <view class="relation-link">
+          <view class="relation-link__stem" />
+          <view class="relation-link__label"><text>家庭</text></view>
+          <view class="relation-link__stem" />
+        </view>
+
+        <view class="couple-row {{spouse ? 'couple-row--paired' : ''}}">
+          <view class="focus-card" bindtap="onOpenFocusModal" hover-class="tap--pressed">
+            <view class="focus-avatar" style="color: {{focus.color}}; background: {{focus.background}};"><text>{{focus.avatarText}}</text></view>
+            <view class="focus-card__body">
+              <view class="focus-name-row">
+                <text class="focus-name">{{focus.name}}</text>
+                <view wx:if="{{focus.isMe}}" class="you-badge you-badge--inline"><text>我</text></view>
+              </view>
+              <text class="focus-relation">{{focus.relation}}</text>
+              <text class="focus-meta">{{focus.meta}}</text>
+            </view>
+            <text class="detail-action">资料 ›</text>
+          </view>
+
+          <view wx:if="{{spouse}}" class="couple-mark"><text>伴侣</text></view>
+
+          <view
+            wx:if="{{spouse}}"
+            class="spouse-card"
+            data-id="{{spouse.id}}"
+            bindtap="onFocusMember"
+            hover-class="tap--pressed"
+          >
+            <view class="relative-avatar" style="color: {{spouse.color}}; background: {{spouse.background}};"><text>{{spouse.avatarText}}</text></view>
+            <view class="spouse-card__body">
+              <text class="relative-name">{{spouse.name}}</text>
+              <text class="relative-meta">{{spouse.relation}}</text>
+            </view>
+            <view wx:if="{{spouse.isMe}}" class="you-badge"><text>我</text></view>
+          </view>
+        </view>
+
+        <view class="relation-link relation-link--children">
+          <view class="relation-link__stem" />
+          <view class="relation-link__label relation-link__label--accent"><text>下一代</text></view>
+          <view class="relation-link__stem" />
+        </view>
+
+        <view class="relation-section relation-section--children">
+          <view wx:if="{{children.length}}" class="children-list">
+            <view
+              wx:for="{{children}}"
+              wx:key="id"
+              class="child-card"
+              data-id="{{item.id}}"
+              bindtap="onFocusMember"
+              hover-class="tap--pressed"
+            >
+              <view class="relative-avatar" style="color: {{item.color}}; background: {{item.background}};"><text>{{item.avatarText}}</text></view>
+              <view class="child-card__body">
+                <text class="relative-name">{{item.name}}</text>
+                <text class="relative-meta">{{item.relation}} · {{item.meta}}</text>
+              </view>
+              <text class="card-arrow">›</text>
+            </view>
+          </view>
+          <view wx:else class="unrecorded"><text>暂无下一代成员</text></view>
+        </view>
+      </view>
+
+      <view wx:if="{{siblings.length}}" class="side-section">
+        <view class="section-heading">
+          <view>
+            <text class="section-eyebrow">同一父母</text>
+            <text class="section-title">兄弟姐妹</text>
+          </view>
+          <text class="section-count">{{siblings.length}} 人</text>
+        </view>
+        <scroll-view class="sibling-scroll" scroll-x enhanced show-scrollbar="{{false}}">
+          <view class="sibling-track">
+            <view
+              wx:for="{{siblings}}"
+              wx:key="id"
+              class="sibling-chip"
+              data-id="{{item.id}}"
+              bindtap="onFocusMember"
+              hover-class="tap--pressed"
+            >
+              <view class="mini-avatar" style="color: {{item.color}}; background: {{item.background}};"><text>{{item.avatarText}}</text></view>
+              <view>
+                <text class="sibling-name">{{item.name}}</text>
+                <text class="sibling-meta">{{item.relation}}</text>
+              </view>
+            </view>
+          </view>
+        </scroll-view>
+      </view>
+
+      <view class="generation-section">
+        <view class="section-heading">
+          <view>
+            <text class="section-eyebrow">全部成员</text>
+            <text class="section-title">按辈分浏览</text>
+          </view>
+          <text class="section-count">点击切换中心人物</text>
+        </view>
+
+        <scroll-view class="generation-tabs" scroll-x enhanced show-scrollbar="{{false}}">
+          <view class="generation-tabs__track">
+            <view
+              wx:for="{{generationTabs}}"
+              wx:key="generation"
+              class="generation-tab {{item.active ? 'generation-tab--active' : ''}}"
+              data-generation="{{item.generation}}"
+              bindtap="onSelectGeneration"
+            >
+              <text>{{item.label}}</text>
+              <text class="generation-tab__count">{{item.count}}人</text>
+            </view>
+          </view>
+        </scroll-view>
+
+        <view class="member-grid">
+          <view
+            wx:for="{{generationMembers}}"
+            wx:key="id"
+            class="member-row {{item.id === focus.id ? 'member-row--active' : ''}}"
+            data-id="{{item.id}}"
+            bindtap="onFocusMember"
+            hover-class="tap--pressed"
+          >
+            <view class="mini-avatar" style="color: {{item.color}}; background: {{item.background}};"><text>{{item.avatarText}}</text></view>
+            <view class="member-row__body">
+              <view class="member-row__name-line">
+                <text class="member-row__name">{{item.name}}</text>
+                <view wx:if="{{item.isMe}}" class="you-badge you-badge--inline"><text>我</text></view>
+              </view>
+              <text class="member-row__meta">{{item.relation}} · {{item.meta}}</text>
+            </view>
+            <text class="card-arrow">›</text>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <view wx:else class="empty-state">
+      <view class="empty-state__icon"><text>家</text></view>
+      <text class="empty-state__title">族谱里还没有成员</text>
+      <text class="empty-state__subtitle">添加家人后，就能从这里浏览家庭关系</text>
     </view>
   </scroll-view>
 </view>

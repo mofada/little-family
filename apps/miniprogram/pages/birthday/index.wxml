@@ -1,16 +1,17 @@
 <view class="page">
   <navigation-bar title="生日管理" back="{{false}}" color="black" background="#f7f3ef" />
 
-  <!-- 搜索 + 过滤 -->
   <view class="toolbar">
     <view class="search-box">
-      <text class="search-icon">🔍</text>
+      <view class="search-icon"><view class="search-icon__circle"></view><view class="search-icon__handle"></view></view>
       <input
         class="search-input"
-        placeholder="搜索姓名…"
+        placeholder="搜索姓名或关系"
+        placeholder-class="search-placeholder"
         value="{{keyword}}"
         bindinput="onSearch"
       />
+      <view wx:if="{{keyword}}" class="search-clear" bindtap="clearSearch">×</view>
     </view>
     <view class="filter-chips">
       <view
@@ -28,19 +29,19 @@
         bindtap="setFilter"
         data-type="solar"
       ><text>阳历</text></view>
+      <text class="result-count">{{monthSections.length ? '按下次生日排序' : ''}}</text>
     </view>
-
   </view>
 
   <scroll-view class="page__list" scroll-y type="list" enhanced show-scrollbar="{{false}}">
-    <view wx:if="{{monthSections.length === 0}}" class="today-section">
-      <view class="today-header"><text class="today-title">还没有生日资料</text></view>
-      <text class="member-sub">可在家庭与成员管理中逐步补充，不影响先建立家谱。</text>
-    </view>
-
     <view class="subscribe-panel">
+      <view class="subscribe-panel__icon">
+        <view class="bell">♢</view>
+        <view class="subscribe-panel__dot"></view>
+      </view>
       <view class="subscribe-panel__info">
-        <text class="subscribe-panel__title">🔔 生日提醒</text>
+        <text class="subscribe-panel__eyebrow">生日管家</text>
+        <text class="subscribe-panel__title">重要日子，提前记得</text>
         <text wx:if="{{subscriptionConfigured && subscriptionMode === 'once'}}" class="subscribe-panel__sub">每天北京时间 08:00 发送 · 剩余 {{activeGrantCount}} 次</text>
         <text wx:elif="{{subscriptionConfigured}}" class="subscribe-panel__sub">每天北京时间 08:00 发送 · {{activeGrantCount > 0 ? '已开启' : '待授权'}}</text>
         <text wx:else class="subscribe-panel__sub">服务端尚未启用生日提醒</text>
@@ -50,16 +51,26 @@
         loading="{{subscribing}}"
         disabled="{{!subscriptionConfigured || subscribing || (subscriptionMode === 'long_term' && activeGrantCount > 0)}}"
         bindtap="subscribeBirthdayReminder"
-      >{{subscriptionMode === 'long_term' ? (activeGrantCount > 0 ? '已开启' : '开启提醒') : '订阅一次提醒'}}</button>
+      >{{subscriptionMode === 'long_term' ? (activeGrantCount > 0 ? '已开启' : '开启提醒') : '订阅提醒'}}</button>
     </view>
-    <!-- 今日生日特殊区块 -->
+
+    <view wx:if="{{monthSections.length === 0}}" class="empty-state">
+      <view class="empty-state__art"><text>生日</text></view>
+      <text class="empty-state__title">{{keyword || filterType !== 'all' ? '没有找到相关成员' : '还没有生日资料'}}</text>
+      <text class="empty-state__desc">{{keyword || filterType !== 'all' ? '换个姓名或生日类型试试' : '可在家庭与成员管理中逐步补充'}}</text>
+    </view>
+
     <view wx:if="{{todayMembers.length > 0}}" class="today-section">
       <view class="today-header">
-        <text class="today-title">🎂 今日生日</text>
+        <view>
+          <text class="today-kicker">TODAY</text>
+          <text class="today-title">今天有人过生日</text>
+        </view>
+        <view class="today-cake">🎂</view>
       </view>
       <view wx:for="{{todayMembers}}" wx:key="id" class="member-row today-member-row">
-        <view class="member-avatar today-avatar">
-          <text>🎂</text>
+        <view class="member-avatar today-avatar" bindtap="onMemberTap" data-json="{{item.memberJson}}">
+          <text>{{item.avatarText}}</text>
         </view>
         <view class="member-info" bindtap="onMemberTap" data-json="{{item.memberJson}}">
           <text class="member-name">{{item.name}}</text>
@@ -71,36 +82,38 @@
       </view>
     </view>
 
-    <!-- 按月分组 -->
     <view wx:for="{{monthSections}}" wx:key="monthKey" class="month-section">
       <view class="month-header">
-        <text class="month-title">{{item.label}}</text>
-        <text class="month-count">{{item.members.length}}人</text>
+        <view class="month-heading">
+          <view class="month-marker"></view>
+          <text class="month-title">{{item.label}}</text>
+        </view>
+        <text class="month-count">共 {{item.members.length}} 人</text>
       </view>
-      <view wx:for="{{item.members}}" wx:for-item="member" wx:key="id" class="member-row {{member.isBirthday ? 'member-row--today' : ''}}">
-        <view
-          class="member-avatar"
-          style="background: {{member.color}}20;"
-          bindtap="onMemberTap"
-          data-json="{{member.memberJson}}"
-        >
-          <text>{{member.isBirthday ? '🎂' : (member.isUrgent ? '⚡' : '👤')}}</text>
-        </view>
-        <view class="member-info" bindtap="onMemberTap" data-json="{{member.memberJson}}">
-          <view class="member-name-row">
-            <text class="member-name">{{member.name}}</text>
-            <view wx:if="{{member.isUrgent}}" class="urgent-badge">
-              <text>{{member.daysUntil}}天后</text>
-            </view>
+      <view class="month-card">
+        <view wx:for="{{item.members}}" wx:for-item="member" wx:key="id" class="member-row {{member.isBirthday ? 'member-row--today' : ''}}" bindtap="onMemberTap" data-json="{{member.memberJson}}">
+          <view class="date-card {{member.isUrgent || member.isBirthday ? 'date-card--accent' : ''}}">
+            <text class="date-card__day">{{member.nextBirthdayDay}}</text>
+            <text class="date-card__week">{{member.nextBirthdayWeekday}}</text>
           </view>
-          <text class="member-sub">{{member.relation}} · {{member.birthdayType === 'lunar' ? (member.isLeapMonth ? '农历闰' : '农历') : '阳历'}}{{member.birthMonth}}月{{member.birthDay}}日</text>
-        </view>
-        <view wx:if="{{member.isBirthday}}" class="prompt-btn" bindtap="generateWish" data-id="{{member.id}}">
-          <text>生成祝福</text>
+          <view class="member-info">
+            <view class="member-name-row">
+              <text class="member-name">{{member.name}}</text>
+              <text class="relation-tag">{{member.relation}}</text>
+            </view>
+            <text class="member-sub">{{member.calendarLabel}} {{member.birthMonth}}月{{member.birthDay}}日</text>
+          </view>
+          <view wx:if="{{member.isBirthday}}" class="prompt-btn" catchtap="generateWish" data-id="{{member.id}}">
+            <text>生成祝福</text>
+          </view>
+          <view wx:else class="countdown {{member.isUrgent ? 'countdown--urgent' : ''}}">
+            <text>{{member.countdownLabel}}</text>
+            <text class="row-arrow">›</text>
+          </view>
         </view>
       </view>
     </view>
-
+    <view class="list-footer">愿每个重要的日子，都被家人记得</view>
   </scroll-view>
 </view>
 

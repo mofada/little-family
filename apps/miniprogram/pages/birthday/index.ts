@@ -1,6 +1,5 @@
 import {
-  familyMembers, getTodayBirthdays, getDaysUntilBirthday, getNextBirthdayDate,
-  getMemberColor
+  familyMembers, getTodayBirthdays, getDaysUntilBirthday, getNextBirthdayDate
 } from '../../utils/familyData'
 import { generateAndCopyBirthdayWish } from '../../utils/birthdayWish'
 import { ensureFamilyData } from '../../services/familyStore'
@@ -18,14 +17,16 @@ interface MemberRow {
   memberJson: string
   name: string
   relation: string
-  color: string
-  daysUntil: number
   isBirthday: boolean
   isUrgent: boolean
   birthdayType: string
   birthMonth: number
   birthDay: number
-  isLeapMonth: boolean
+  nextBirthdayDay: string
+  nextBirthdayWeekday: string
+  countdownLabel: string
+  calendarLabel: string
+  avatarText: string
 }
 
 Component({
@@ -85,19 +86,23 @@ Component({
 
       const toRow = (m: typeof familyMembers[0]): MemberRow => {
         const daysUntil = getDaysUntilBirthday(m) ?? 0
+        const nextBirthday = getNextBirthdayDate(m, new Date())
+        const weekdays = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
         return {
           id: m.id,
           memberJson: JSON.stringify(m),
           name: m.name,
           relation: m.relation,
-          color: getMemberColor(m),
-          daysUntil,
           isBirthday: todayIds.has(m.id),
           isUrgent: daysUntil > 0 && daysUntil <= 7,
           birthdayType: m.birthdayType ?? 'solar',
           birthMonth: m.birthMonth ?? 1,
           birthDay: m.birthDay ?? 1,
-          isLeapMonth: m.isLeapMonth ?? false,
+          nextBirthdayDay: nextBirthday ? String(nextBirthday.getDate()).padStart(2, '0') : '--',
+          nextBirthdayWeekday: nextBirthday ? weekdays[nextBirthday.getDay()] : '',
+          countdownLabel: daysUntil === 0 ? '就是今天' : daysUntil === 1 ? '明天' : `${daysUntil}天后`,
+          calendarLabel: m.birthdayType === 'lunar' ? (m.isLeapMonth ? '农历闰月' : '农历') : '阳历',
+          avatarText: m.name.slice(-1),
         }
       }
 
@@ -142,6 +147,10 @@ Component({
 
     onSearch(e: WechatMiniprogram.Input) {
       this.setData({ keyword: e.detail.value }, () => { void this.buildList() })
+    },
+
+    clearSearch() {
+      this.setData({ keyword: '' }, () => { void this.buildList() })
     },
 
     setFilter(e: WechatMiniprogram.TouchEvent) {
