@@ -19,6 +19,8 @@ NODE_ENV=production
 ALLOW_DEV_LOGIN=false
 ```
 
+生日祝福生成功能还需要配置 `DEEPSEEK_API_KEY`；`DEEPSEEK_MODEL` 可选，默认使用 `deepseek-v4-flash`。DeepSeek 调用失败时，小程序会降级复制本地提示词。
+
 发布前先在项目根目录验证代码：
 
 ```bash
@@ -43,6 +45,8 @@ PORT=3002
 DATABASE_PATH=./data/little-family.db
 WECHAT_APP_ID=你的小程序AppID
 WECHAT_APP_SECRET=你的小程序AppSecret
+DEEPSEEK_API_KEY=你的DeepSeek API Key
+DEEPSEEK_MODEL=deepseek-v4-flash
 SESSION_DAYS=30
 ALLOW_DEV_LOGIN=false
 ```
@@ -115,6 +119,8 @@ Docker 部署使用仓库根目录的 `compose.yaml`。服务器仓库根目录�
 ```dotenv
 WECHAT_APP_ID=你的小程序AppID
 WECHAT_APP_SECRET=你的小程序AppSecret
+DEEPSEEK_API_KEY=你的DeepSeek API Key
+DEEPSEEK_MODEL=deepseek-v4-flash
 ```
 
 代码更新后执行：
@@ -129,7 +135,7 @@ docker compose build api
 docker compose up -d api
 ```
 
-Compose 会重新构建镜像并替换 API 容器，SQLite 数据保存在命名卷 `little-family-data` 中，不会因容器替换而删除。不要运行 `docker compose down -v`，其中 `-v` 会删除数据卷。
+Compose 会重新构建镜像并替换 API 容器，SQLite 数据保存在仓库根目录的 `data/little-family.db` 中（服务器上通常为 `/home/ubuntu/little-family/data/little-family.db`），不会因容器替换而删除。`data/` 已被 Git 忽略。
 
 发布后验证：
 
@@ -142,25 +148,28 @@ curl --fail https://你的API域名/health
 
 ### Docker 数据备份
 
-应在更新前定期备份 SQLite 数据。最稳妥的方式是短暂停止 API 后，备份 Compose 数据卷。先查询实际卷名：
+应在更新前定期备份 SQLite 数据。最稳妥的方式是短暂停止 API 后，备份整个 `data` 目录：
 
 ```bash
 docker compose stop api
-docker volume ls --filter name=little-family-data
-```
-
-假设输出的卷名是 `little-family_little-family-data`，执行：
-
-```bash
 mkdir -p backups
-docker run --rm \
-  -v little-family_little-family-data:/data:ro \
-  -v "$PWD/backups:/backup" \
-  alpine sh -c 'tar -czf /backup/api-data.tar.gz -C / data'
+tar -czf "backups/api-data-$(date +%F-%H%M%S).tar.gz" data
 docker compose up -d api
 ```
 
-卷名取决于 Compose 项目名，必须使用 `docker volume ls` 查到的实际名称。
+从旧版命名卷首次迁移到 `./data` 时，先停止 API，再复制整个目录（包括 WAL 和 SHM 文件）：
+
+```bash
+docker compose stop api
+mkdir -p data
+docker run --rm \
+  -v little-family_little-family-data:/from:ro \
+  -v "$PWD/data:/to" \
+  alpine sh -c 'cp -a /from/. /to/'
+docker compose up -d api
+```
+
+确认新目录中的数据正常后，旧命名卷可暂时保留作为额外备份。
 
 ## 4. 回滚
 

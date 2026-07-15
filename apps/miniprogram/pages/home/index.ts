@@ -1,8 +1,8 @@
 import {
   familyMembers, getTodayBirthdays, getUpcomingBirthdays,
-  getDaysUntilBirthday, buildBirthdayPrompt, getMemberColor
+  getDaysUntilBirthday, getMemberColor
 } from '../../utils/familyData'
-import { copyToClipboard } from '../../utils/common'
+import { generateAndCopyBirthdayWish } from '../../utils/birthdayWish'
 import { ensureFamilyData } from '../../services/familyStore'
 
 interface BirthdayItem {
@@ -91,12 +91,13 @@ Component({
       this.setData({ showModal: false, selectedMemberJson: '' })
     },
 
-    copyTodayPrompt(e: WechatMiniprogram.TouchEvent) {
+    async generateTodayWish(e: WechatMiniprogram.TouchEvent) {
       const idx = (e.currentTarget.dataset as { index: number }).index
       const item = this.data.todayBirthdays[idx]
       if (!item) return
       const member = familyMembers.find(m => m.id === item.id)
-      if (member) copyToClipboard(buildBirthdayPrompt(member), '✅ 已复制祝福Prompt')
+      const snapshot = await ensureFamilyData()
+      if (member && snapshot) await generateAndCopyBirthdayWish(snapshot.family.id, member)
     },
 
     goPage(e: WechatMiniprogram.TouchEvent) {

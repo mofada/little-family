@@ -11,6 +11,8 @@ export const config = {
   databasePath: path.resolve(process.cwd(), process.env.DATABASE_PATH ?? './data/little-family.db'),
   wechatAppId: process.env.WECHAT_APP_ID ?? '',
   wechatAppSecret: process.env.WECHAT_APP_SECRET ?? '',
+  deepseekApiKey: process.env.DEEPSEEK_API_KEY ?? '',
+  deepseekModel: process.env.DEEPSEEK_MODEL ?? 'deepseek-v4-flash',
   sessionDays: numberFromEnv(process.env.SESSION_DAYS, 30),
   allowDevLogin: process.env.NODE_ENV !== 'production' && process.env.ALLOW_DEV_LOGIN === 'true',
 }

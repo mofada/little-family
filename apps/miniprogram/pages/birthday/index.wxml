@@ -65,8 +65,8 @@
           <text class="member-name">{{item.name}}</text>
           <text class="member-sub">{{item.relation}} · {{item.birthdayType === 'lunar' ? (item.isLeapMonth ? '农历闰' : '农历') : '阳历'}}{{item.birthMonth}}月{{item.birthDay}}日</text>
         </view>
-        <view class="prompt-btn" bindtap="copyPrompt" data-id="{{item.id}}">
-          <text>📋</text>
+        <view class="prompt-btn" bindtap="generateWish" data-id="{{item.id}}">
+          <text>生成祝福</text>
         </view>
       </view>
     </view>
@@ -95,8 +95,8 @@
           </view>
           <text class="member-sub">{{member.relation}} · {{member.birthdayType === 'lunar' ? (member.isLeapMonth ? '农历闰' : '农历') : '阳历'}}{{member.birthMonth}}月{{member.birthDay}}日</text>
         </view>
-        <view class="prompt-btn" bindtap="copyPrompt" data-id="{{member.id}}">
-          <text>📋</text>
+        <view wx:if="{{member.isBirthday}}" class="prompt-btn" bindtap="generateWish" data-id="{{member.id}}">
+          <text>生成祝福</text>
         </view>
       </view>
     </view>

@@ -83,9 +83,9 @@
       </view>
 
       <!-- 操作按钮 -->
-      <view wx:if="{{member.birthdayType}}" class="modal-actions">
-        <view class="modal-btn modal-btn--primary" bindtap="copyPrompt">
-          <text>📋 复制生日祝福 Prompt</text>
+      <view wx:if="{{isBirthday}}" class="modal-actions">
+        <view class="modal-btn modal-btn--primary" bindtap="generateWish">
+          <text>生成生日祝福</text>
         </view>
       </view>
 

@@ -1,5 +1,6 @@
-import { familyMembers, calculateAge, getDaysUntilBirthday, buildBirthdayPrompt, getMemberColor } from '../../utils/familyData'
-import { copyToClipboard } from '../../utils/common'
+import { familyMembers, calculateAge, getDaysUntilBirthday, getMemberColor } from '../../utils/familyData'
+import { getCurrentSnapshot } from '../../services/familyStore'
+import { generateAndCopyBirthdayWish } from '../../utils/birthdayWish'
 
 interface MemberData {
   id: string
@@ -99,11 +100,11 @@ Component({
       // 阻止冒泡到遮罩
       void e
     },
-    copyPrompt() {
+    async generateWish() {
       const { member } = this.data
-      if (!member) return
-      const prompt = buildBirthdayPrompt(member)
-      copyToClipboard(prompt, '✅ 已复制祝福Prompt')
+      const familyId = getCurrentSnapshot()?.family.id
+      if (!member || !familyId || !this.data.isBirthday) return
+      await generateAndCopyBirthdayWish(familyId, member)
     }
   }
 })

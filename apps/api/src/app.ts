@@ -13,8 +13,17 @@ import {
 } from './schemas'
 import { AppError, type AuthenticatedRequest, type FamilyRole } from './types'
 import { BIRTHDAY_TEMPLATE } from './birthdayTemplate'
+import { getBeijingClock } from './birthdayClock'
+import { generateBirthdayWish } from './deepseek'
 
 const now = (): string => new Date().toISOString()
+
+const birthdayWishRateLimit = rateLimit({
+  windowMs: 60_000,
+  limit: 10,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+})
 
 const routeParam = (request: Request, name: string): string => {
   const value = request.params[name]
@@ -48,6 +57,37 @@ interface MemberRow {
   birth_day: number | null
   is_leap_month: number
   created_at: string
+}
+
+const isBirthdayToday = (member: MemberRow): boolean => {
+  const clock = getBeijingClock()
+  if (member.birthday_type === 'solar') {
+    return member.birth_month === clock.month && member.birth_day === clock.day
+  }
+  if (member.birthday_type === 'lunar') {
+    return member.birth_month === clock.lunarMonth && member.birth_day === clock.lunarDay
+      && (member.is_leap_month === 1) === clock.lunarLeap
+  }
+  return false
+}
+
+const buildBirthdayPrompt = (member: MemberRow): string => {
+  const age = member.birth_year ? getBeijingClock().year - member.birth_year : null
+  return `请模仿中国家庭微信群生日祝福风格生成文案。
+要求：
+- 温馨自然
+- 不要太正式
+- 适合发亲戚群
+- 带 emoji
+- 可以带微信表情：[蛋糕][庆祝][玫瑰]
+- 不同年龄层语气不同
+
+生日的人：
+姓名：${member.name}${member.nickname ? `（${member.nickname}）` : ''}
+称呼：${member.relation_label}
+性别：${member.gender === 'male' ? '男' : '女'}
+年龄：${age !== null ? `${age}岁` : '未知'}
+生日：${member.birthday_type === 'lunar' ? `农历${member.is_leap_month ? '闰' : ''}` : '阳历'}${member.birth_month}月${member.birth_day}日`
 }
 
 interface RelationshipRow {
@@ -375,6 +415,24 @@ app.post('/api/families/:familyId/birthday-subscriptions', (request: Request, re
   `).run(grantId, familyId, authUser.id, input.templateId, now())
   audit(familyId, authUser.id, 'grant', 'birthday_subscription', grantId)
   response.status(201).json({ grantId })
+})
+
+app.post('/api/families/:familyId/members/:memberId/birthday-wish', birthdayWishRateLimit, async (request: Request, response) => {
+  const { authUser } = request as AuthenticatedRequest
+  const familyId = routeParam(request, 'familyId')
+  const memberId = routeParam(request, 'memberId')
+  requireFamilyRole(authUser.id, familyId, 'viewer')
+  const member = db.prepare(`
+    SELECT id, name, nickname, relation_label, birth_year,
+           gender, birthday_type, birth_month, birth_day, is_leap_month, created_at
+    FROM members WHERE id = ? AND family_id = ?
+  `).get(memberId, familyId) as unknown as MemberRow | undefined
+  if (!member) throw new AppError(404, '家庭成员不存在', 'MEMBER_NOT_FOUND')
+  if (!isBirthdayToday(member)) {
+    throw new AppError(400, '仅可在成员生日当天生成祝福', 'NOT_MEMBER_BIRTHDAY')
+  }
+  const wish = await generateBirthdayWish(buildBirthdayPrompt(member))
+  response.json({ wish })
 })
 
 app.post('/api/families/:familyId/members', (request: Request, response) => {

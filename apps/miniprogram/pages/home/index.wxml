@@ -1,5 +1,5 @@
 <view class="page">
-<navigation-bar title="小家谱" back="{{false}}" color="black" background="#f7f3ef" />
+<navigation-bar title="小家记" back="{{false}}" color="black" background="#f7f3ef" />
 
 <scroll-view class="page__list" scroll-y type="list" enhanced show-scrollbar="{{false}}">
 
@@ -46,8 +46,8 @@
         <text class="birthday-name">{{item.name}}</text>
         <text class="birthday-meta">{{item.relation}} · {{item.birthdayType === 'lunar' ? (item.isLeapMonth ? '农历闰' : '农历') : '阳历'}}{{item.birthMonth}}月{{item.birthDay}}日</text>
       </view>
-      <view bindtap="copyTodayPrompt" data-index="{{index}}" class="copy-btn">
-        <text>📋 Prompt</text>
+      <view bindtap="generateTodayWish" data-index="{{index}}" class="copy-btn">
+        <text>生成生日祝福</text>
       </view>
     </view>
   </view>

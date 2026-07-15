@@ -66,6 +66,8 @@ PORT=3000
 DATABASE_PATH=./data/little-family.db
 WECHAT_APP_ID=你的小程序AppID
 WECHAT_APP_SECRET=你的小程序AppSecret
+DEEPSEEK_API_KEY=你的DeepSeek API Key
+DEEPSEEK_MODEL=deepseek-v4-flash
 SESSION_DAYS=30
 ALLOW_DEV_LOGIN=true
 ```
@@ -83,6 +85,8 @@ API 默认地址为 `http://127.0.0.1:3000`，健康检查为 `/health`。
 生日提醒使用微信小程序一次性订阅消息。用户每次授权后，API 保存一次可用发送机会，成功发送后需要再次订阅。API 常驻进程每分钟检查一次，并在北京时间 08:00–08:59 内为当天首次运行发送提醒；数据库按家庭、用户和日期去重，因此同一天不会重复发送。
 
 当前生日模板固定在 `apps/api/src/birthdayTemplate.ts`：模板 ID `4Hd2RmOKkWxhOzvP_ZTIKYaCiCorerofM0yPpydIdRg`，称呼 `name1`，生日日期 `thing6`，温馨提示 `thing5`。服务端配置微信 AppID/AppSecret 后自动启用。
+
+生日当天，小程序可以通过服务端调用 DeepSeek 生成生日祝福并复制。服务端需配置 `DEEPSEEK_API_KEY`，可用 `DEEPSEEK_MODEL` 指定模型（默认 `deepseek-v4-flash`）；未配置或生成失败时，小程序会自动改为复制原始祝福提示词。API Key 不得写入小程序源码。
 
 API 启动时会执行版本化数据库迁移。旧数据库中的 `branch_name` 会在 v1 迁移中移除，同时把生日字段调整为可空；发布前仍应按部署章节备份完整 SQLite 数据目录。
 
@@ -160,6 +164,8 @@ pm2 save
 ```dotenv
 WECHAT_APP_ID=你的小程序AppID
 WECHAT_APP_SECRET=你的小程序AppSecret
+DEEPSEEK_API_KEY=你的DeepSeek API Key
+DEEPSEEK_MODEL=deepseek-v4-flash
 ```
 
 启动：
@@ -169,7 +175,7 @@ docker compose up -d --build
 curl http://127.0.0.1:3002/health
 ```
 
-SQLite 保存在命名卷 `little-family-data`。PM2 和 Docker 是两种部署方式，不要同时启动同一套 API。
+SQLite 保存在仓库根目录的 `data/little-family.db`（服务器上通常为 `/home/ubuntu/little-family/data/little-family.db`）。`data/` 已被 Git 忽略。PM2 和 Docker 是两种部署方式，不要同时启动同一套 API。
 
 ## 增加 Web 端
 
