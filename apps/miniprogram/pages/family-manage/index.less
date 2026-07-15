@@ -1,0 +1,24 @@
+@import '../../styles/theme';
+
+.page { height: 100vh; background: var(--color-bg); display: flex; flex-direction: column; }
+.content { flex: 1; box-sizing: border-box; padding: 20rpx 28rpx 50rpx; }
+.card { background: #fff; border-radius: 24rpx; padding: 28rpx; margin-bottom: 20rpx; border: 1rpx solid #f2ece8; }
+.card-title { display: block; font-size: 32rpx; font-weight: 700; color: var(--color-primary); margin-bottom: 18rpx; }
+.sub { display: block; font-size: 23rpx; color: var(--color-text-sub); margin-top: 5rpx; }
+.picker-value { padding: 22rpx; border-radius: 16rpx; background: var(--color-bg); display: flex; justify-content: space-between; margin-bottom: 18rpx; }
+.form-row, .title-row, .member-row { display: flex; align-items: center; gap: 12rpx; }
+.title-row { justify-content: space-between; margin-bottom: 12rpx; }
+.title-row .card-title { margin-bottom: 0; }
+.input { flex: 1; background: var(--color-bg); border-radius: 16rpx; padding: 18rpx 20rpx; font-size: 26rpx; }
+button { margin: 0; line-height: 1.4; }
+button::after { border: 0; }
+.small-button { padding: 16rpx 22rpx; border-radius: 16rpx; font-size: 24rpx; color: var(--color-primary); background: #eee8e4; }
+.primary, .full-button { color: #fff; background: var(--color-accent); }
+.member-row { padding: 20rpx 0; border-bottom: 1rpx solid #f2ece8; }
+.member-info { flex: 1; min-width: 0; }
+.member-name { font-size: 28rpx; font-weight: 650; color: var(--color-primary); }
+.text-button { padding: 8rpx; font-size: 22rpx; color: var(--color-accent); background: transparent; }
+.danger { color: #b91c1c; }
+.full-button { margin-top: 22rpx; border-radius: 18rpx; font-size: 27rpx; padding: 20rpx; }
+.invite-code { display: block; margin-top: 18rpx; padding: 18rpx; text-align: center; letter-spacing: 4rpx; background: var(--color-bg); border-radius: 14rpx; }
+.empty { text-align: center; padding: 30rpx; color: var(--color-text-sub); font-size: 25rpx; }

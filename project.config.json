@@ -1,6 +1,6 @@
 {
   "description": "项目配置文件",
-  "miniprogramRoot": "miniprogram/",
+  "miniprogramRoot": "apps/miniprogram/",
   "compileType": "miniprogram",
   "setting": {
     "useCompilerPlugins": [
@@ -37,7 +37,7 @@
   "simulatorType": "wechat",
   "simulatorPluginLibVersion": {},
   "condition": {},
-  "srcMiniprogramRoot": "miniprogram/",
+  "srcMiniprogramRoot": "apps/miniprogram/",
   "editorSetting": {
     "tabIndent": "insertSpaces",
     "tabSize": 2

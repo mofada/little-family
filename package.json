@@ -1,18 +1,26 @@
 {
-  "name": "miniprogram-ts-less-quickstart",
+  "name": "little-family-monorepo",
   "version": "1.0.0",
-  "description": "",
-  "scripts": {},
-  "keywords": [],
-  "author": "",
-  "license": "",
-  "dependencies": {
-    "lunar-javascript": "^1.7.7"
+  "private": true,
+  "description": "小家谱多端应用 Monorepo",
+  "workspaces": [
+    "apps/api",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:api": "npm run dev --workspace @little-family/api",
+    "build:api": "npm run build --workspace @little-family/api",
+    "start:api": "npm run start --workspace @little-family/api",
+    "check:miniprogram": "tsc -p apps/miniprogram/tsconfig.json --noEmit",
+    "check:api": "npm run check --workspace @little-family/api",
+    "check": "npm run check:miniprogram && npm run check:api",
+    "icons:generate": "node scripts/generate-tabbar-icons.js && node scripts/convert-tabbar-svg-to-png.js"
   },
   "devDependencies": {
     "@resvg/resvg-js": "^2.6.2",
     "lucide-static": "^1.16.0",
     "miniprogram-api-typings": "^2.8.3-1",
-    "sharp": "^0.34.5"
+    "sharp": "^0.34.5",
+    "typescript": "^5.7.3"
   }
 }

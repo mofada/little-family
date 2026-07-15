@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const { Resvg } = require('@resvg/resvg-js');
 
-const tabbarDir = path.join(__dirname, '../miniprogram/assets/tabbar');
+const tabbarDir = path.join(__dirname, '../apps/miniprogram/assets/tabbar');
 
 async function convert() {
   if (!fs.existsSync(tabbarDir)) {

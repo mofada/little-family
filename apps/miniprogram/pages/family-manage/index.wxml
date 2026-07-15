@@ -1,0 +1,48 @@
+<view class="page">
+  <navigation-bar title="家庭管理" back="{{true}}" color="black" background="#f7f3ef" />
+  <scroll-view class="content" scroll-y>
+    <view wx:if="{{loading}}" class="card empty"><text>正在加载…</text></view>
+
+    <view class="card">
+      <text class="card-title">我的家庭</text>
+      <picker wx:if="{{families.length > 0}}" mode="selector" range="{{families}}" range-key="name" value="{{familyIndex}}" bindchange="onFamilyChange">
+        <view class="picker-value"><text>{{activeFamilyName}}</text><text>切换 ›</text></view>
+      </picker>
+      <view class="form-row">
+        <input class="input" placeholder="新家庭名称" value="{{newFamilyName}}" bindinput="onFamilyNameInput" maxlength="30" />
+        <button class="small-button primary" bindtap="createFamily">创建</button>
+      </view>
+    </view>
+
+    <view class="card">
+      <text class="card-title">通过邀请码加入</text>
+      <view class="form-row">
+        <input class="input" placeholder="输入亲人发来的邀请码" value="{{joinCode}}" bindinput="onJoinCodeInput" />
+        <button class="small-button" bindtap="joinFamily">加入</button>
+      </view>
+    </view>
+
+    <view wx:if="{{activeFamilyId}}" class="card">
+      <view class="title-row">
+        <view><text class="card-title">家庭成员</text><text class="sub">{{members.length}} 人 · {{activeRole}}</text></view>
+        <button wx:if="{{canEdit}}" class="small-button primary" bindtap="startAdd">新增成员</button>
+      </view>
+      <view wx:if="{{members.length === 0}}" class="empty"><text>还没有成员，先添加第一位家人吧</text></view>
+      <view wx:for="{{members}}" wx:key="id" class="member-row">
+        <view class="member-info" bindtap="editMember" data-json="{{item.memberJson}}">
+          <text class="member-name">{{item.name}}</text>
+          <text class="sub">{{item.relation || '未设置称呼'}} · {{item.branchName}}</text>
+        </view>
+        <button class="text-button" bindtap="setAsMe" data-id="{{item.id}}">{{linkedMemberId === item.id ? '我 ✓' : '设为我'}}</button>
+        <button wx:if="{{canEdit}}" class="text-button danger" bindtap="removeMember" data-id="{{item.id}}" data-name="{{item.name}}">删除</button>
+      </view>
+    </view>
+
+    <view wx:if="{{activeFamilyId && canInvite}}" class="card">
+      <text class="card-title">邀请亲人</text>
+      <text class="sub">生成一次性编辑者邀请码，72 小时内有效</text>
+      <button class="full-button" bindtap="generateInvite">生成并复制邀请码</button>
+      <text wx:if="{{inviteCode}}" class="invite-code">{{inviteCode}}</text>
+    </view>
+  </scroll-view>
+</view>

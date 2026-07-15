@@ -1,0 +1,21 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3002:3000"
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_PATH: /repo/apps/api/data/little-family.db
+      WECHAT_APP_ID: ${WECHAT_APP_ID}
+      WECHAT_APP_SECRET: ${WECHAT_APP_SECRET}
+      SESSION_DAYS: 30
+      ALLOW_DEV_LOGIN: "false"
+    volumes:
+      - little-family-data:/repo/apps/api/data
+
+volumes:
+  little-family-data:

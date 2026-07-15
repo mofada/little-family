@@ -14,7 +14,7 @@ const colors = [
   { suffix: '-active', color: '#d4756a' }
 ];
 
-const outputDir = path.join(__dirname, '../miniprogram/assets/tabbar');
+const outputDir = path.join(__dirname, '../apps/miniprogram/assets/tabbar');
 const lucideDir = path.join(__dirname, '../node_modules/lucide-static/icons');
 
 if (!fs.existsSync(outputDir)) {

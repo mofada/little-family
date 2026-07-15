@@ -1,0 +1,116 @@
+<view wx:if="{{show}}" class="modal-mask" bindtap="onMaskTap">
+  <view class="modal-sheet" catchtap="onContentTap">
+    <!-- Header -->
+    <view class="modal-header" style="background: linear-gradient(135deg, {{color}}18, {{color}}08);">
+      <view bindtap="onClose" class="modal-close">✕</view>
+
+      <view class="modal-hero">
+        <view class="modal-avatar" style="background: {{genderBg}};">
+          <text class="modal-avatar__emoji">{{avatarEmoji}}</text>
+        </view>
+        <view class="modal-hero-info">
+          <view class="modal-name-row">
+            <text class="modal-name">{{member.name}}</text>
+            <text wx:if="{{member.nickName}}" class="modal-nickname">"{{member.nickName}}"</text>
+          </view>
+          <text class="modal-relation">{{member.relation}}</text>
+          <view class="modal-tags">
+            <view class="modal-tag" style="background: {{member.gender === 'male' ? '#dbeafe' : '#fce7f3'}}; color: {{member.gender === 'male' ? '#1d4ed8' : '#be185d'}};">
+              <text>{{member.familyName}}</text>
+            </view>
+            <view class="modal-tag modal-tag--gen">
+              <text>第{{member.generation}}代</text>
+            </view>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <!-- Content -->
+    <scroll-view class="modal-content" scroll-y type="list">
+      <!-- 生日信息 -->
+      <view class="modal-section">
+        <view class="modal-info-row">
+          <view class="modal-info-icon" style="background: rgba(212,117,106,0.1);">
+            <text>🎂</text>
+          </view>
+          <view class="modal-info-body">
+            <text class="modal-info-label">生日</text>
+            <text class="modal-info-value">{{member.birthYear ? member.birthYear + '年 ' : ''}}{{member.birthdayType === 'lunar' ? (member.isLeapMonth ? '农历闰' : '农历') : '阳历'}}{{member.birthMonth}}月{{member.birthDay}}日</text>
+          </view>
+          <view wx:if="{{isBirthday}}" class="modal-badge modal-badge--today">🎂 今天</view>
+          <view wx:else class="modal-badge modal-badge--days">还剩 {{daysUntil}} 天</view>
+        </view>
+
+        <!-- 年龄 -->
+        <view class="modal-info-row">
+          <view class="modal-info-icon" style="background: rgba(107,157,138,0.1);">
+            <text>👤</text>
+          </view>
+          <view class="modal-info-body">
+            <text class="modal-info-label">年龄</text>
+            <text class="modal-info-value">{{age !== null ? age + ' 岁' : '未知'}}</text>
+          </view>
+        </view>
+
+        <!-- 家族 -->
+        <view class="modal-info-row">
+          <view class="modal-info-icon" style="background: rgba(168,134,108,0.1);">
+            <text>🏠</text>
+          </view>
+          <view class="modal-info-body">
+            <text class="modal-info-label">所属家族</text>
+            <text class="modal-info-value">{{member.familyName}}</text>
+          </view>
+        </view>
+      </view>
+
+      <!-- 家庭关系 -->
+      <view wx:if="{{parents.length > 0 || spouse || children.length > 0}}" class="modal-section">
+        <view class="modal-section-title">
+          <text>🌿</text>
+          <text>家庭关系</text>
+        </view>
+
+        <view wx:if="{{parents.length > 0}}" class="modal-relation-group">
+          <text class="modal-relation-label">父母</text>
+          <view class="modal-relation-tags">
+            <view wx:for="{{parents}}" wx:key="id" class="modal-relation-tag">
+              <text>{{item.name}}</text>
+            </view>
+          </view>
+        </view>
+
+        <view wx:if="{{spouse}}" class="modal-relation-group">
+          <text class="modal-relation-label">配偶</text>
+          <view class="modal-relation-tags">
+            <view class="modal-relation-tag">
+              <text>{{spouse.name}}</text>
+            </view>
+          </view>
+        </view>
+
+        <view wx:if="{{children.length > 0}}" class="modal-relation-group">
+          <text class="modal-relation-label">子女</text>
+          <view class="modal-relation-tags">
+            <view wx:for="{{children}}" wx:key="id" class="modal-relation-tag">
+              <text>{{item.name}}</text>
+            </view>
+          </view>
+        </view>
+      </view>
+
+      <!-- 操作按钮 -->
+      <view class="modal-actions">
+        <view class="modal-btn modal-btn--secondary" bindtap="subscribeBirthday">
+          <text>🔔 订阅该成员生日提醒</text>
+        </view>
+        <view class="modal-btn modal-btn--primary" bindtap="copyPrompt">
+          <text>📋 复制生日祝福 Prompt</text>
+        </view>
+      </view>
+
+      <view class="modal-bottom" />
+    </scroll-view>
+  </view>
+</view>
