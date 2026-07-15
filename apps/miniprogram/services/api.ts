@@ -25,17 +25,16 @@ export interface FamilySnapshot {
 }
 
 export interface MemberInput {
-  branchName: string
   name: string
   nickName?: string | null
   relation: string
   birthYear: number | null
-  gender: 'male' | 'female'
-  birthdayType: 'solar' | 'lunar'
-  birthMonth: number
-  birthDay: number
+  gender: 'male' | 'female' | 'unknown'
+  birthdayType: 'solar' | 'lunar' | null
+  birthMonth: number | null
+  birthDay: number | null
   isLeapMonth?: boolean
-  parentId?: string | null
+  parentIds?: string[]
   spouseId?: string | null
 }
 

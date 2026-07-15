@@ -1,22 +1,15 @@
-const PALETTE: Record<string, string> = {
-  莫家: "#3b82f6", 彭家: "#16a34a", 唐家: "#f97316", 周家: "#9333ea",
-  田家: "#0d9488", 曾家: "#ca8a04", 何家: "#dc2626", 肖家: "#4f46e5",
-  任家: "#db2777", 谢家: "#d97706", 白家: "#a8866c", 卢家: "#64748b",
-}
-
 interface MemberData {
   id: string
-  parentId: string | null
+  parentIds: string[]
   spouseId: string | null
-  familyName: string
   name: string
   nickName?: string
   relation: string
   birthYear: number | null
-  gender: "male" | "female"
-  birthdayType: "solar" | "lunar"
-  birthMonth: number
-  birthDay: number
+  gender: "male" | "female" | "unknown"
+  birthdayType: "solar" | "lunar" | null
+  birthMonth: number | null
+  birthDay: number | null
 }
 
 Component({
@@ -38,14 +31,14 @@ Component({
       if (!json) return
       try {
         const m: MemberData = JSON.parse(json)
-        const color = PALETTE[m.familyName] ?? '#a8866c'
+        const color = m.gender === 'male' ? '#4f7fbf' : m.gender === 'female' ? '#d47586' : '#8b817d'
         const age = m.birthYear ? new Date().getFullYear() - m.birthYear : null
         this.setData({
           member: m,
           color,
           age,
           isMe: m.relation === '我自己',
-          avatarEmoji: m.gender === 'male' ? '👨' : '👩',
+          avatarEmoji: m.gender === 'male' ? '👨' : m.gender === 'female' ? '👩' : '👤',
         })
       } catch {
         // ignore parse error

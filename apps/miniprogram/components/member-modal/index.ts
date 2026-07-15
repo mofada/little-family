@@ -1,21 +1,19 @@
-import { familyMembers, calculateAge, getDaysUntilBirthday, buildBirthdayPrompt, getFamilyColor } from '../../utils/familyData'
+import { familyMembers, calculateAge, getDaysUntilBirthday, buildBirthdayPrompt, getMemberColor } from '../../utils/familyData'
 import { copyToClipboard } from '../../utils/common'
-import { requestFamilySubscribe } from '../../utils/subscription'
 
 interface MemberData {
   id: string
-  parentId: string | null
+  parentIds: string[]
   spouseId: string | null
-  familyName: string
   generation: number
   name: string
   nickName?: string
   relation: string
   birthYear: number | null
-  gender: "male" | "female"
-  birthdayType: "solar" | "lunar"
-  birthMonth: number
-  birthDay: number
+  gender: "male" | "female" | "unknown"
+  birthdayType: "solar" | "lunar" | null
+  birthMonth: number | null
+  birthDay: number | null
   isLeapMonth?: boolean
 }
 
@@ -23,8 +21,7 @@ interface RelativeMember {
   id: string
   name: string
   relation: string
-  familyName: string
-  gender: "male" | "female"
+  gender: "male" | "female" | "unknown"
 }
 
 Component({
@@ -38,7 +35,7 @@ Component({
     spouse: null as RelativeMember | null,
     children: [] as RelativeMember[],
     age: null as number | null,
-    daysUntil: 0,
+    daysUntil: null as number | null,
     color: '#a8866c',
     avatarEmoji: '👤',
     isBirthday: false,
@@ -49,29 +46,26 @@ Component({
       if (!json) return
       try {
         const m: MemberData = JSON.parse(json)
-        const color = getFamilyColor(m.familyName)
+        const color = getMemberColor(m)
         const age = calculateAge(m.birthYear)
         const daysUntil = getDaysUntilBirthday(m)
 
         // 找父母
-        const directParent = familyMembers.find(x => x.id === m.parentId)
-        const otherParent = directParent?.spouseId
-          ? familyMembers.find(x => x.id === directParent.spouseId)
-          : undefined
-        const parents: RelativeMember[] = [directParent, otherParent]
+        const parents: RelativeMember[] = m.parentIds
+          .map(parentId => familyMembers.find(x => x.id === parentId))
           .filter((x): x is MemberData => !!x)
-          .map(x => ({ id: x.id, name: x.name, relation: x.relation, familyName: x.familyName, gender: x.gender }))
+          .map(x => ({ id: x.id, name: x.name, relation: x.relation, gender: x.gender }))
 
         // 找配偶
         const spouseRaw = m.spouseId ? familyMembers.find(x => x.id === m.spouseId) : undefined
         const spouse: RelativeMember | null = spouseRaw
-          ? { id: spouseRaw.id, name: spouseRaw.name, relation: spouseRaw.relation, familyName: spouseRaw.familyName, gender: spouseRaw.gender }
+          ? { id: spouseRaw.id, name: spouseRaw.name, relation: spouseRaw.relation, gender: spouseRaw.gender }
           : null
 
         // 找子女
         const children: RelativeMember[] = familyMembers
-          .filter(x => x.parentId === m.id || (m.spouseId !== null && x.parentId === m.spouseId))
-          .map(x => ({ id: x.id, name: x.name, relation: x.relation, familyName: x.familyName, gender: x.gender }))
+          .filter(x => x.parentIds.includes(m.id) || (m.spouseId !== null && x.parentIds.includes(m.spouseId)))
+          .map(x => ({ id: x.id, name: x.name, relation: x.relation, gender: x.gender }))
 
         this.setData({
           member: m,
@@ -81,11 +75,13 @@ Component({
           age,
           daysUntil,
           color,
-          avatarEmoji: m.gender === 'male' ? '👨' : '👩',
+          avatarEmoji: m.gender === 'male' ? '👨' : m.gender === 'female' ? '👩' : '👤',
           isBirthday: daysUntil === 0,
           genderBg: m.gender === 'male'
             ? 'linear-gradient(135deg, #dbeafe, #bfdbfe)'
-            : 'linear-gradient(135deg, #fce7f3, #fbcfe8)',
+            : m.gender === 'female'
+              ? 'linear-gradient(135deg, #fce7f3, #fbcfe8)'
+              : 'linear-gradient(135deg, #eee9e5, #ddd5cf)',
         })
       } catch {
         // ignore
@@ -108,14 +104,6 @@ Component({
       if (!member) return
       const prompt = buildBirthdayPrompt(member)
       copyToClipboard(prompt, '✅ 已复制祝福Prompt')
-    },
-    subscribeBirthday() {
-      const { member } = this.data
-      if (!member) return
-      void requestFamilySubscribe({
-        scene: 'member-modal',
-        memberName: member.name,
-      })
     }
   }
 })

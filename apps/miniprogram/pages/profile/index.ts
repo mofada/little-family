@@ -1,28 +1,21 @@
 import {
-  familyMembers, getFamilyColor, calculateAge, getDaysUntilBirthday,
-  getFamilyBranches, findRelationPath
+  familyMembers, getMemberColor, calculateAge, getDaysUntilBirthday, findRelationPath
 } from '../../utils/familyData'
-import {
-  requestFamilySubscribe,
-  openSubscribeSettingPanel,
-  getConfiguredSubscribeTemplateIds,
-} from '../../utils/subscription'
 import { ensureFamilyData } from '../../services/familyStore'
 
 interface MeData {
   id: string
   name: string
   relation: string
-  familyName: string
   color: string
   birthYear: number | null
   age: number | null
   gender: string
-  birthdayType: string
-  birthMonth: number
-  birthDay: number
+  birthdayType: string | null
+  birthMonth: number | null
+  birthDay: number | null
   isLeapMonth: boolean
-  daysUntilBirthday: number
+  daysUntilBirthday: number | null
   memberJson: string
 }
 
@@ -30,16 +23,9 @@ interface RelativeItem {
   id: string
   name: string
   relation: string
-  familyName: string
   color: string
   gender: string
   memberJson: string
-}
-
-interface BranchItem {
-  name: string
-  color: string
-  count: number
 }
 
 interface MemberOption {
@@ -51,7 +37,6 @@ interface MemberOption {
 interface PathStep {
   name: string
   relation: string
-  familyName: string
   color: string
 }
 
@@ -63,8 +48,9 @@ Component({
     siblings: [] as RelativeItem[],
     children: [] as RelativeItem[],
     statsTotal: familyMembers.length,
-    statsFamilies: 0,
-    statsBranches: [] as BranchItem[],
+    birthdayRecorded: 0,
+    relationRecorded: 0,
+    completeness: 0,
     // 关系查询
     memberOptions: [] as MemberOption[],
     fromMemberId: '',
@@ -74,7 +60,6 @@ Component({
     relationPath: [] as PathStep[],
     pathFound: false,
     pathSearched: false,
-    subscribeTemplateCount: 0,
     showModal: false,
     selectedMemberJson: '',
   },
@@ -89,7 +74,7 @@ Component({
   methods: {
     async loadData() {
       try {
-      const snapshot = await ensureFamilyData(true)
+      const snapshot = await ensureFamilyData()
       if (!snapshot || familyMembers.length === 0) {
         this.setData({ me: null, parents: [], spouse: null, siblings: [], children: [], statsTotal: 0 })
         return
@@ -104,8 +89,7 @@ Component({
         id: me.id,
         name: me.name,
         relation: me.relation,
-        familyName: me.familyName,
-        color: getFamilyColor(me.familyName),
+        color: getMemberColor(me),
         birthYear: me.birthYear,
         age: calculateAge(me.birthYear),
         gender: me.gender,
@@ -118,18 +102,14 @@ Component({
       }
 
       // Parents
-      const directParent = familyMembers.find(m => m.id === me.parentId)
-      const otherParent = directParent?.spouseId
-        ? familyMembers.find(m => m.id === directParent.spouseId)
-        : undefined
-      const parents: RelativeItem[] = [directParent, otherParent]
+      const parents: RelativeItem[] = me.parentIds
+        .map(parentId => familyMembers.find(m => m.id === parentId))
         .filter((m): m is typeof familyMembers[0] => !!m)
         .map(m => ({
           id: m.id,
           name: m.name,
           relation: m.relation,
-          familyName: m.familyName,
-          color: getFamilyColor(m.familyName),
+          color: getMemberColor(m),
           gender: m.gender,
           memberJson: JSON.stringify(m),
         }))
@@ -141,8 +121,7 @@ Component({
             id: spouseRaw.id,
             name: spouseRaw.name,
             relation: spouseRaw.relation,
-            familyName: spouseRaw.familyName,
-            color: getFamilyColor(spouseRaw.familyName),
+            color: getMemberColor(spouseRaw),
             gender: spouseRaw.gender,
             memberJson: JSON.stringify(spouseRaw),
           }
@@ -150,41 +129,34 @@ Component({
 
       // Siblings (same parent, not me)
       const siblings: RelativeItem[] = familyMembers
-        .filter(m => m.parentId === me.parentId && m.id !== me.id && me.parentId !== null)
+        .filter(m => m.id !== me.id && m.parentIds.some(parentId => me.parentIds.includes(parentId)))
         .map(m => ({
           id: m.id,
           name: m.name,
           relation: m.relation,
-          familyName: m.familyName,
-          color: getFamilyColor(m.familyName),
+          color: getMemberColor(m),
           gender: m.gender,
           memberJson: JSON.stringify(m),
         }))
 
       // Children
       const children: RelativeItem[] = familyMembers
-        .filter(m => m.parentId === me.id || (me.spouseId !== null && m.parentId === me.spouseId))
+        .filter(m => m.parentIds.includes(me.id) || (me.spouseId !== null && m.parentIds.includes(me.spouseId)))
         .map(m => ({
           id: m.id,
           name: m.name,
           relation: m.relation,
-          familyName: m.familyName,
-          color: getFamilyColor(m.familyName),
+          color: getMemberColor(m),
           gender: m.gender,
           memberJson: JSON.stringify(m),
         }))
 
-      // Family stats
-      const branches = getFamilyBranches()
-      const branchMap = new Map<string, number>()
-      familyMembers.forEach(m => {
-        branchMap.set(m.familyName, (branchMap.get(m.familyName) ?? 0) + 1)
-      })
-      const statsBranches: BranchItem[] = branches.map(name => ({
-        name,
-        color: getFamilyColor(name),
-        count: branchMap.get(name) ?? 0,
-      })).sort((a, b) => b.count - a.count)
+      const birthdayRecorded = familyMembers.filter(m => m.birthdayType && m.birthMonth !== null && m.birthDay !== null).length
+      const relationRecorded = familyMembers.filter(m => m.parentIds.length > 0 || m.spouseId !== null).length
+      const completeFields = birthdayRecorded + relationRecorded
+      const completeness = familyMembers.length > 0
+        ? Math.round(completeFields / (familyMembers.length * 2) * 100)
+        : 0
 
       // Member options for picker
       const memberOptions = familyMembers.map(m => ({
@@ -200,26 +172,18 @@ Component({
         spouse,
         siblings,
         children,
-        statsFamilies: branches.length,
         statsTotal: familyMembers.length,
-        statsBranches,
+        birthdayRecorded,
+        relationRecorded,
+        completeness,
         memberOptions,
         fromMemberId: me.id,
         fromMemberIdx: fromIdx,
         toMemberIdx: -1,
-        subscribeTemplateCount: getConfiguredSubscribeTemplateIds().length,
       })
       } catch (error) {
         wx.showToast({ title: error instanceof Error ? error.message : '加载失败', icon: 'none' })
       }
-    },
-
-    subscribeNow() {
-      void requestFamilySubscribe({ scene: 'profile-page' })
-    },
-
-    openSubscribeSettings() {
-      openSubscribeSettingPanel()
     },
 
     onFromChange(e: WechatMiniprogram.PickerChange) {
@@ -248,8 +212,7 @@ Component({
       const relationPath: PathStep[] = path.map(m => ({
         name: m.name,
         relation: m.relation,
-        familyName: m.familyName,
-        color: getFamilyColor(m.familyName),
+        color: getMemberColor(m),
       }))
       this.setData({
         relationPath,

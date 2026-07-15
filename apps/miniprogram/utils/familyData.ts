@@ -9,15 +9,11 @@ export const replaceFamilyMembers = (members: FamilyMember[]): void => {
   familyMembers.splice(0, familyMembers.length, ...members)
 }
 
-// 家族颜色映射
-export const FAMILY_PALETTE: Record<string, string> = {
-  莫家: "#3b82f6", 彭家: "#16a34a", 唐家: "#f97316", 周家: "#9333ea",
-  田家: "#0d9488", 曾家: "#ca8a04", 何家: "#dc2626", 肖家: "#4f46e5",
-  任家: "#db2777", 谢家: "#d97706", 白家: "#a8866c", 卢家: "#64748b",
+export const getMemberColor = (member: Pick<FamilyMember, 'gender'>): string => {
+  if (member.gender === 'male') return '#4f7fbf'
+  if (member.gender === 'female') return '#d47586'
+  return '#8b817d'
 }
-
-export const getFamilyColor = (familyName: string): string =>
-  FAMILY_PALETTE[familyName] ?? "#a8866c"
 
 // 农历生日转指定农历年份的公历日期
 const getLunarBirthdayAsSolar = (lunarMonth: number, lunarDay: number, year: number): Date => {
@@ -47,21 +43,24 @@ const calendarDayDiff = (from: Date, to: Date): number => {
 }
 
 // 获取下一次生日的公历日期。农历年与公历年并不完全重合，因此同时检查相邻农历年。
-export const getNextBirthdayDate = (member: FamilyMember, now = new Date()): Date => {
+export const getNextBirthdayDate = (member: FamilyMember, now = new Date()): Date | null => {
+  if (!member.birthdayType || member.birthMonth === null || member.birthDay === null) return null
+  const birthMonth = member.birthMonth
+  const birthDay = member.birthDay
   const today = startOfDay(now)
   const year = today.getFullYear()
 
   if (member.birthdayType === "solar") {
-    const thisYear = new Date(year, member.birthMonth - 1, member.birthDay)
+    const thisYear = new Date(year, birthMonth - 1, birthDay)
     return thisYear >= today
       ? thisYear
-      : new Date(year + 1, member.birthMonth - 1, member.birthDay)
+      : new Date(year + 1, birthMonth - 1, birthDay)
   }
 
   const candidates = [year - 1, year, year + 1, year + 2]
     .map(lunarYear => getLunarBirthdayAsSolar(
-      member.isLeapMonth ? -member.birthMonth : member.birthMonth,
-      member.birthDay,
+      member.isLeapMonth ? -birthMonth : birthMonth,
+      birthDay,
       lunarYear,
     ))
     .filter(date => date >= today)
@@ -71,8 +70,10 @@ export const getNextBirthdayDate = (member: FamilyMember, now = new Date()): Dat
 }
 
 // 获取距今生日天数（0=今天，正数=还剩几天，循环到明年）
-export const getDaysUntilBirthday = (member: FamilyMember, now = new Date()): number =>
-  calendarDayDiff(startOfDay(now), getNextBirthdayDate(member, now))
+export const getDaysUntilBirthday = (member: FamilyMember, now = new Date()): number | null => {
+  const next = getNextBirthdayDate(member, now)
+  return next ? calendarDayDiff(startOfDay(now), next) : null
+}
 
 // 今日生日成员
 export const getTodayBirthdays = (): FamilyMember[] => {
@@ -86,6 +87,7 @@ export const getTodayBirthdays = (): FamilyMember[] => {
   const solarDay = today.getDate()
 
   return familyMembers.filter(member => {
+    if (!member.birthdayType || member.birthMonth === null || member.birthDay === null) return false
     if (member.birthdayType === "lunar") {
       const memberMonth = member.isLeapMonth ? -member.birthMonth : member.birthMonth
       return memberMonth === lunarMonth && member.birthDay === lunarDay
@@ -100,9 +102,9 @@ export const getUpcomingBirthdays = (days = 30): FamilyMember[] => {
   return familyMembers
     .filter(member => {
       const d = getDaysUntilBirthday(member)
-      return d > 0 && d <= days
+      return d !== null && d > 0 && d <= days
     })
-    .sort((a, b) => getDaysUntilBirthday(a) - getDaysUntilBirthday(b))
+    .sort((a, b) => (getDaysUntilBirthday(a) ?? Infinity) - (getDaysUntilBirthday(b) ?? Infinity))
 }
 
 // 计算年龄
@@ -122,17 +124,12 @@ export const getMembersByGeneration = (): Map<number, FamilyMember[]> => {
   return grouped
 }
 
-// 获取所有家族分支
-export const getFamilyBranches = (): string[] => {
-  const branches = new Set(familyMembers.map(m => m.familyName))
-  return Array.from(branches)
-}
-
 // 按月份获取成员
 export const getMembersByMonth = (): Map<number, FamilyMember[]> => {
   const map = new Map<number, FamilyMember[]>()
   for (let i = 1; i <= 12; i++) map.set(i, [])
   familyMembers.forEach(m => {
+    if (m.birthMonth === null) return
     const list = map.get(m.birthMonth)
     if (list) list.push(m)
   })
@@ -156,7 +153,9 @@ export const buildBirthdayPrompt = (member: FamilyMember): string => {
 称呼：${member.relation}
 性别：${member.gender === "male" ? "男" : "女"}
 年龄：${age !== null ? `${age}岁` : "未知"}
-生日：${member.birthdayType === "lunar" ? `农历${member.isLeapMonth ? "闰" : ""}` : "阳历"}${member.birthMonth}月${member.birthDay}日`
+生日：${member.birthdayType && member.birthMonth !== null && member.birthDay !== null
+    ? `${member.birthdayType === "lunar" ? `农历${member.isLeapMonth ? "闰" : ""}` : "阳历"}${member.birthMonth}月${member.birthDay}日`
+    : "未记录"}`
 }
 
 // BFS 查找关系路径
@@ -168,11 +167,13 @@ export const findRelationPath = (fromId: string, toId: string): FamilyMember[] =
     const m = byId.get(id)
     if (!m) return []
     const neighbors: string[] = []
-    if (m.parentId) neighbors.push(m.parentId)
+    neighbors.push(...m.parentIds)
     if (m.spouseId) neighbors.push(m.spouseId)
-    familyMembers.filter(x => x.parentId === id).forEach(x => neighbors.push(x.id))
-    const parent = m.parentId ? byId.get(m.parentId) : undefined
-    if (parent?.spouseId && parent.spouseId !== id) neighbors.push(parent.spouseId)
+    familyMembers.filter(x => x.parentIds.includes(id)).forEach(x => neighbors.push(x.id))
+    m.parentIds.forEach(parentId => {
+      const parent = byId.get(parentId)
+      if (parent?.spouseId && parent.spouseId !== id) neighbors.push(parent.spouseId)
+    })
     return neighbors
   }
 

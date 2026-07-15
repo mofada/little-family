@@ -14,6 +14,8 @@
     "check:miniprogram": "tsc -p apps/miniprogram/tsconfig.json --noEmit",
     "check:api": "npm run check --workspace @little-family/api",
     "check": "npm run check:miniprogram && npm run check:api",
+    "test:api": "npm run test --workspace @little-family/api",
+    "test": "npm run test:api",
     "icons:generate": "node scripts/generate-tabbar-icons.js && node scripts/convert-tabbar-svg-to-png.js"
   },
   "devDependencies": {

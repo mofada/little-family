@@ -1,6 +1,6 @@
 import {
   familyMembers, getTodayBirthdays, getUpcomingBirthdays,
-  getDaysUntilBirthday, getFamilyBranches, buildBirthdayPrompt, getFamilyColor
+  getDaysUntilBirthday, buildBirthdayPrompt, getMemberColor
 } from '../../utils/familyData'
 import { copyToClipboard } from '../../utils/common'
 import { ensureFamilyData } from '../../services/familyStore'
@@ -10,20 +10,18 @@ interface BirthdayItem {
   memberJson: string
   name: string
   relation: string
-  familyName: string
   color: string
   daysUntil: number
   isUrgent: boolean
   birthdayType: string
-  birthMonth: number
-  birthDay: number
+  birthMonth: number | null
+  birthDay: number | null
   isLeapMonth: boolean
 }
 
 Component({
   data: {
     statsTotal: familyMembers.length,
-    statsFamilies: 0,
     statsTodayCount: 0,
     statsUpcoming: 0,
     todayBirthdays: [] as BirthdayItem[],
@@ -44,28 +42,26 @@ Component({
   methods: {
     async loadData() {
       try {
-        const snapshot = await ensureFamilyData(true)
+        const snapshot = await ensureFamilyData()
         if (!snapshot) {
           this.setData({
-            loading: false, needsFamily: true, statsTotal: 0, statsFamilies: 0,
+            loading: false, needsFamily: true, statsTotal: 0,
             statsTodayCount: 0, statsUpcoming: 0, todayBirthdays: [], upcomingBirthdays: [],
           })
           return
         }
       const today = getTodayBirthdays()
       const upcoming = getUpcomingBirthdays(30)
-      const branches = getFamilyBranches()
 
       const mapItem = (m: typeof familyMembers[0], days: number): BirthdayItem => ({
         id: m.id,
         memberJson: JSON.stringify(m),
         name: m.name,
         relation: m.relation,
-        familyName: m.familyName,
-        color: getFamilyColor(m.familyName),
+        color: getMemberColor(m),
         daysUntil: days,
         isUrgent: days > 0 && days <= 7,
-        birthdayType: m.birthdayType,
+        birthdayType: m.birthdayType ?? 'solar',
         birthMonth: m.birthMonth,
         birthDay: m.birthDay,
         isLeapMonth: m.isLeapMonth ?? false,
@@ -75,11 +71,10 @@ Component({
         loading: false,
         needsFamily: false,
         statsTotal: familyMembers.length,
-        statsFamilies: branches.length,
         statsTodayCount: today.length,
         statsUpcoming: upcoming.length,
         todayBirthdays: today.map(m => mapItem(m, 0)),
-        upcomingBirthdays: upcoming.map(m => mapItem(m, getDaysUntilBirthday(m))),
+        upcomingBirthdays: upcoming.map(m => mapItem(m, getDaysUntilBirthday(m) ?? 0)),
       })
       } catch (error) {
         this.setData({ loading: false })

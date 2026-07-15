@@ -1,6 +1,8 @@
 # 小家谱（Little Family）
 
-小家谱是一个包含微信小程序和自建 Node.js API 的 Monorepo。当前支持微信登录、私有家庭空间、成员维护、亲缘图谱、生日提醒和家庭邀请码，目录已为未来 Web 端和共享包预留扩展位置。
+小家谱是一个包含微信小程序和自建 Node.js API 的 Monorepo。当前支持微信登录、私有家庭空间、成员维护、亲缘图谱、生日管理和家庭邀请码，目录已为未来 Web 端和共享包预留扩展位置。
+
+当前产品以“家庭关系档案 + 生日管理 + 家庭协作维护”为核心。成员仅要求姓名，可选填性别、出生年份和完整生日；每位成员最多关联两位父母和一位配偶。小程序使用“首页、图谱、生日、我的”四个主导航，不再维护独立的家族分支字段。
 
 ## 仓库结构
 
@@ -46,6 +48,7 @@ npm run start:api           # 运行已编译 API
 npm run check:miniprogram   # 检查小程序 TypeScript
 npm run check:api           # 检查 API TypeScript
 npm run check               # 检查全部应用
+npm test                    # 运行 API 自动化测试
 npm run icons:generate      # 重新生成 TabBar 图标
 ```
 
@@ -74,6 +77,8 @@ npm run dev:api
 ```
 
 API 默认地址为 `http://127.0.0.1:3000`，健康检查为 `/health`。
+
+API 启动时会执行版本化数据库迁移。旧数据库中的 `branch_name` 会在 v1 迁移中移除，同时把生日字段调整为可空；发布前仍应按部署章节备份完整 SQLite 数据目录。
 
 小程序开发：
 

@@ -1,13 +1,8 @@
 import {
   familyMembers, getTodayBirthdays, getDaysUntilBirthday, getNextBirthdayDate,
-  buildBirthdayPrompt, getFamilyColor
+  buildBirthdayPrompt, getMemberColor
 } from '../../utils/familyData'
 import { copyToClipboard } from '../../utils/common'
-import {
-  requestFamilySubscribe,
-  openSubscribeSettingPanel,
-  getConfiguredSubscribeTemplateIds,
-} from '../../utils/subscription'
 import { ensureFamilyData } from '../../services/familyStore'
 
 interface MonthSection {
@@ -21,7 +16,6 @@ interface MemberRow {
   memberJson: string
   name: string
   relation: string
-  familyName: string
   color: string
   daysUntil: number
   isBirthday: boolean
@@ -38,35 +32,28 @@ Component({
     filterType: 'all' as 'all' | 'lunar' | 'solar',
     todayMembers: [] as MemberRow[],
     monthSections: [] as MonthSection[],
-    subscribeTemplateCount: 0,
     showModal: false,
     selectedMemberJson: '',
   },
   lifetimes: {
     attached() {
       this.buildList()
-      this.refreshSubscribeState()
     }
   },
   pageLifetimes: {
     show() {
       this.buildList()
-      this.refreshSubscribeState()
     }
   },
   methods: {
-    refreshSubscribeState() {
-      const ids = getConfiguredSubscribeTemplateIds()
-      this.setData({ subscribeTemplateCount: ids.length })
-    },
-
     async buildList() {
       try {
-        await ensureFamilyData(true)
+        await ensureFamilyData()
       const { keyword, filterType } = this.data
       const kw = keyword.trim().toLowerCase()
 
       const filtered = familyMembers.filter(m => {
+        if (!m.birthdayType || m.birthMonth === null || m.birthDay === null) return false
         if (filterType !== 'all' && m.birthdayType !== filterType) return false
         if (kw && !m.name.toLowerCase().includes(kw) && !m.relation.includes(kw)) return false
         return true
@@ -76,20 +63,19 @@ Component({
       const todayIds = new Set(today.map(m => m.id))
 
       const toRow = (m: typeof familyMembers[0]): MemberRow => {
-        const daysUntil = getDaysUntilBirthday(m)
+        const daysUntil = getDaysUntilBirthday(m) ?? 0
         return {
           id: m.id,
           memberJson: JSON.stringify(m),
           name: m.name,
           relation: m.relation,
-          familyName: m.familyName,
-          color: getFamilyColor(m.familyName),
+          color: getMemberColor(m),
           daysUntil,
           isBirthday: todayIds.has(m.id),
           isUrgent: daysUntil > 0 && daysUntil <= 7,
-          birthdayType: m.birthdayType,
-          birthMonth: m.birthMonth,
-          birthDay: m.birthDay,
+          birthdayType: m.birthdayType ?? 'solar',
+          birthMonth: m.birthMonth ?? 1,
+          birthDay: m.birthDay ?? 1,
           isLeapMonth: m.isLeapMonth ?? false,
         }
       }
@@ -107,6 +93,7 @@ Component({
       const sectionMap = new Map<string, { date: Date; members: typeof filtered }>()
       filtered.forEach(member => {
         const date = getNextBirthdayDate(member, now)
+        if (!date) return
         const key = `${date.getFullYear()}-${date.getMonth() + 1}`
         const existing = sectionMap.get(key)
         if (existing) {
@@ -122,7 +109,7 @@ Component({
           label: `${section.date.getFullYear()}年${section.date.getMonth() + 1}月`,
           monthKey,
           members: section.members
-            .sort((a, b) => getNextBirthdayDate(a, now).getTime() - getNextBirthdayDate(b, now).getTime())
+            .sort((a, b) => (getNextBirthdayDate(a, now)?.getTime() ?? 0) - (getNextBirthdayDate(b, now)?.getTime() ?? 0))
             .map(toRow),
         }))
 
@@ -150,14 +137,6 @@ Component({
       const id = (e.currentTarget.dataset as { id: string }).id
       const member = familyMembers.find(m => m.id === id)
       if (member) copyToClipboard(buildBirthdayPrompt(member), '✅ 已复制祝福Prompt')
-    },
-
-    subscribeNow() {
-      void requestFamilySubscribe({ scene: 'birthday-page' })
-    },
-
-    openSubscribeSettings() {
-      openSubscribeSettingPanel()
     },
 
     onModalClose() {

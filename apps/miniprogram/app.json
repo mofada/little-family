@@ -3,7 +3,6 @@
     "pages/home/index",
     "pages/tree/index",
     "pages/birthday/index",
-    "pages/timeline/index",
     "pages/profile/index",
     "pages/family-manage/index",
     "pages/member-edit/index"
@@ -31,12 +30,6 @@
         "text": "生日",
         "iconPath": "assets/tabbar/birthday.png",
         "selectedIconPath": "assets/tabbar/birthday-active.png"
-      },
-      {
-        "pagePath": "pages/timeline/index",
-        "text": "时间轴",
-        "iconPath": "assets/tabbar/timeline.png",
-        "selectedIconPath": "assets/tabbar/timeline-active.png"
       },
       {
         "pagePath": "pages/profile/index",

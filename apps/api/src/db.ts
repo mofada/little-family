@@ -63,16 +63,15 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS members (
     id TEXT PRIMARY KEY,
     family_id TEXT NOT NULL REFERENCES families(id) ON DELETE CASCADE,
-    branch_name TEXT NOT NULL,
     generation INTEGER NOT NULL CHECK(generation >= 1 AND generation <= 20),
     name TEXT NOT NULL,
     nickname TEXT,
     relation_label TEXT NOT NULL DEFAULT '',
     birth_year INTEGER,
-    gender TEXT NOT NULL CHECK(gender IN ('male', 'female')),
-    birthday_type TEXT NOT NULL CHECK(birthday_type IN ('solar', 'lunar')),
-    birth_month INTEGER NOT NULL CHECK(birth_month BETWEEN 1 AND 12),
-    birth_day INTEGER NOT NULL CHECK(birth_day BETWEEN 1 AND 31),
+    gender TEXT NOT NULL CHECK(gender IN ('male', 'female', 'unknown')),
+    birthday_type TEXT CHECK(birthday_type IN ('solar', 'lunar')),
+    birth_month INTEGER CHECK(birth_month BETWEEN 1 AND 12),
+    birth_day INTEGER CHECK(birth_day BETWEEN 1 AND 31),
     is_leap_month INTEGER NOT NULL DEFAULT 0 CHECK(is_leap_month IN (0, 1)),
     created_by TEXT NOT NULL REFERENCES users(id),
     created_at TEXT NOT NULL,
@@ -116,4 +115,68 @@ db.exec(`
     created_at TEXT NOT NULL
   );
   CREATE INDEX IF NOT EXISTS idx_audit_family_created ON audit_logs(family_id, created_at);
+
+  CREATE TABLE IF NOT EXISTS schema_migrations (
+    version INTEGER PRIMARY KEY,
+    applied_at TEXT NOT NULL
+  );
 `)
+
+// v1 removes the presentation-only "family branch" field and allows partial
+// member profiles. SQLite cannot drop/check-change columns in place, so rebuild
+// the table while foreign-key enforcement is temporarily suspended.
+const memberColumns = db.prepare('PRAGMA table_info(members)').all() as unknown as Array<{
+  name: string
+  notnull: number
+}>
+const needsMemberV1Migration = memberColumns.some(column => column.name === 'branch_name')
+  || memberColumns.some(column => ['birthday_type', 'birth_month', 'birth_day'].includes(column.name) && column.notnull === 1)
+
+if (needsMemberV1Migration) {
+  db.exec('PRAGMA foreign_keys = OFF;')
+  try {
+    db.exec(`
+      BEGIN IMMEDIATE;
+      CREATE TABLE members_v1 (
+        id TEXT PRIMARY KEY,
+        family_id TEXT NOT NULL REFERENCES families(id) ON DELETE CASCADE,
+        generation INTEGER NOT NULL CHECK(generation >= 1 AND generation <= 20),
+        name TEXT NOT NULL,
+        nickname TEXT,
+        relation_label TEXT NOT NULL DEFAULT '',
+        birth_year INTEGER,
+        gender TEXT NOT NULL CHECK(gender IN ('male', 'female', 'unknown')),
+        birthday_type TEXT CHECK(birthday_type IN ('solar', 'lunar')),
+        birth_month INTEGER CHECK(birth_month BETWEEN 1 AND 12),
+        birth_day INTEGER CHECK(birth_day BETWEEN 1 AND 31),
+        is_leap_month INTEGER NOT NULL DEFAULT 0 CHECK(is_leap_month IN (0, 1)),
+        created_by TEXT NOT NULL REFERENCES users(id),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      INSERT INTO members_v1 (
+        id, family_id, generation, name, nickname, relation_label, birth_year,
+        gender, birthday_type, birth_month, birth_day, is_leap_month,
+        created_by, created_at, updated_at
+      )
+      SELECT id, family_id, generation, name, nickname, relation_label, birth_year,
+        gender, birthday_type, birth_month, birth_day, is_leap_month,
+        created_by, created_at, updated_at
+      FROM members;
+      DROP TABLE members;
+      ALTER TABLE members_v1 RENAME TO members;
+      CREATE INDEX idx_members_family ON members(family_id);
+      INSERT OR REPLACE INTO schema_migrations (version, applied_at)
+      VALUES (1, datetime('now'));
+      COMMIT;
+    `)
+  } catch (error) {
+    try { db.exec('ROLLBACK;') } catch { /* transaction may already be closed */ }
+    throw error
+  } finally {
+    db.exec('PRAGMA foreign_keys = ON;')
+  }
+} else {
+  db.prepare('INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (1, ?)')
+    .run(new Date().toISOString())
+}

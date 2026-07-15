@@ -5,9 +5,9 @@ import { FamilyMember } from '../../types/family'
 interface MemberOption { id: string; name: string }
 
 const emptyForm = (): MemberInput => ({
-  branchName: '', name: '', nickName: '', relation: '', birthYear: null,
-  gender: 'male', birthdayType: 'lunar', birthMonth: 1, birthDay: 1,
-  isLeapMonth: false, parentId: null, spouseId: null,
+  name: '', nickName: '', relation: '', birthYear: null,
+  gender: 'unknown', birthdayType: null, birthMonth: null, birthDay: null,
+  isLeapMonth: false, parentIds: [], spouseId: null,
 })
 
 Component({
@@ -15,11 +15,13 @@ Component({
     editingId: '',
     title: '新增成员',
     form: emptyForm(),
-    genderOptions: ['男', '女'],
+    genderOptions: ['未知', '男', '女'],
     birthdayTypeOptions: ['农历', '阳历'],
     genderIndex: 0,
     birthdayTypeIndex: 0,
-    parentIndex: 0,
+    hasBirthday: false,
+    fatherIndex: 0,
+    motherIndex: 0,
     spouseIndex: 0,
     memberOptions: [{ id: '', name: '无' }] as MemberOption[],
     saving: false,
@@ -44,7 +46,6 @@ Component({
             .map(member => ({ id: member.id, name: `${member.name}（${member.relation || '成员'}）` })),
         ]
         const form: MemberInput = editing ? {
-          branchName: editing.familyName,
           name: editing.name,
           nickName: editing.nickName ?? '',
           relation: editing.relation,
@@ -54,16 +55,25 @@ Component({
           birthMonth: editing.birthMonth,
           birthDay: editing.birthDay,
           isLeapMonth: editing.isLeapMonth ?? false,
-          parentId: editing.parentId,
+          parentIds: editing.parentIds,
           spouseId: editing.spouseId,
         } : emptyForm()
+        const parentMembers = (form.parentIds ?? [])
+          .map(id => snapshot.members.find(member => member.id === id))
+          .filter((member): member is FamilyMember => !!member)
+        const fatherId = parentMembers.find(member => member.gender === 'male')?.id ?? parentMembers[0]?.id ?? ''
+        const motherId = parentMembers.find(member => member.gender === 'female' && member.id !== fatherId)?.id
+          ?? parentMembers.find(member => member.id !== fatherId)?.id
+          ?? ''
         this.setData({
           editingId: editing?.id ?? '',
           title: editing ? '编辑成员' : '新增成员',
           form,
-          genderIndex: form.gender === 'male' ? 0 : 1,
+          genderIndex: form.gender === 'unknown' ? 0 : form.gender === 'male' ? 1 : 2,
           birthdayTypeIndex: form.birthdayType === 'lunar' ? 0 : 1,
-          parentIndex: Math.max(0, memberOptions.findIndex(item => item.id === form.parentId)),
+          hasBirthday: form.birthdayType !== null,
+          fatherIndex: Math.max(0, memberOptions.findIndex(item => item.id === fatherId)),
+          motherIndex: Math.max(0, memberOptions.findIndex(item => item.id === motherId)),
           spouseIndex: Math.max(0, memberOptions.findIndex(item => item.id === form.spouseId)),
           memberOptions,
         })
@@ -85,7 +95,7 @@ Component({
 
     onGenderChange(e: WechatMiniprogram.PickerChange) {
       const index = Number(e.detail.value)
-      this.setData({ genderIndex: index, 'form.gender': index === 0 ? 'male' : 'female' })
+      this.setData({ genderIndex: index, 'form.gender': index === 0 ? 'unknown' : index === 1 ? 'male' : 'female' })
     },
 
     onBirthdayTypeChange(e: WechatMiniprogram.PickerChange) {
@@ -93,13 +103,34 @@ Component({
       this.setData({ birthdayTypeIndex: index, 'form.birthdayType': index === 0 ? 'lunar' : 'solar' })
     },
 
+    onHasBirthdayChange(e: WechatMiniprogram.SwitchChange) {
+      const enabled = e.detail.value
+      this.setData({
+        hasBirthday: enabled,
+        'form.birthdayType': enabled ? 'lunar' : null,
+        'form.birthMonth': enabled ? 1 : null,
+        'form.birthDay': enabled ? 1 : null,
+        'form.isLeapMonth': false,
+        birthdayTypeIndex: 0,
+      })
+    },
+
     onLeapMonthChange(e: WechatMiniprogram.SwitchChange) {
       this.setData({ 'form.isLeapMonth': e.detail.value })
     },
 
-    onParentChange(e: WechatMiniprogram.PickerChange) {
+    onFatherChange(e: WechatMiniprogram.PickerChange) {
       const index = Number(e.detail.value)
-      this.setData({ parentIndex: index, 'form.parentId': this.data.memberOptions[index]?.id || null })
+      const fatherId = this.data.memberOptions[index]?.id || ''
+      const motherId = this.data.memberOptions[this.data.motherIndex]?.id || ''
+      this.setData({ fatherIndex: index, 'form.parentIds': [fatherId, motherId].filter(Boolean) })
+    },
+
+    onMotherChange(e: WechatMiniprogram.PickerChange) {
+      const index = Number(e.detail.value)
+      const fatherId = this.data.memberOptions[this.data.fatherIndex]?.id || ''
+      const motherId = this.data.memberOptions[index]?.id || ''
+      this.setData({ motherIndex: index, 'form.parentIds': [fatherId, motherId].filter(Boolean) })
     },
 
     onSpouseChange(e: WechatMiniprogram.PickerChange) {
@@ -109,12 +140,16 @@ Component({
 
     async submit() {
       const form = this.data.form
-      if (!form.name.trim() || !form.branchName.trim()) {
-        wx.showToast({ title: '姓名和家族分支不能为空', icon: 'none' })
+      if (!form.name.trim()) {
+        wx.showToast({ title: '姓名不能为空', icon: 'none' })
         return
       }
-      if (!Number.isInteger(form.birthMonth) || !Number.isInteger(form.birthDay)) {
+      if (this.data.hasBirthday && (!Number.isInteger(form.birthMonth) || !Number.isInteger(form.birthDay))) {
         wx.showToast({ title: '请填写有效的生日', icon: 'none' })
+        return
+      }
+      if ((form.parentIds?.length ?? 0) !== new Set(form.parentIds ?? []).size) {
+        wx.showToast({ title: '父亲和母亲不能是同一人', icon: 'none' })
         return
       }
       const snapshot = getCurrentSnapshot()

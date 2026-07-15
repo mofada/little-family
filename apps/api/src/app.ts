@@ -34,15 +34,14 @@ const audit = (
 
 interface MemberRow {
   id: string
-  branch_name: string
   name: string
   nickname: string | null
   relation_label: string
   birth_year: number | null
-  gender: 'male' | 'female'
-  birthday_type: 'solar' | 'lunar'
-  birth_month: number
-  birth_day: number
+  gender: 'male' | 'female' | 'unknown'
+  birthday_type: 'solar' | 'lunar' | null
+  birth_month: number | null
+  birth_day: number | null
   is_leap_month: number
   created_at: string
 }
@@ -120,7 +119,7 @@ const syncFamilyGenerations = (familyId: string): void => {
 
 const getSnapshot = (familyId: string) => {
   const members = db.prepare(`
-    SELECT id, branch_name, name, nickname, relation_label, birth_year,
+    SELECT id, name, nickname, relation_label, birth_year,
            gender, birthday_type, birth_month, birth_day, is_leap_month, created_at
     FROM members WHERE family_id = ?
   `).all(familyId) as unknown as MemberRow[]
@@ -133,7 +132,9 @@ const getSnapshot = (familyId: string) => {
 
   return {
     members: members.map(member => {
-      const parent = relationships.find(item => item.type === 'parent' && item.to_member_id === member.id)
+      const parentIds = relationships
+        .filter(item => item.type === 'parent' && item.to_member_id === member.id)
+        .map(item => item.from_member_id)
       const spouse = relationships.find(item =>
         item.type === 'spouse' &&
         (item.from_member_id === member.id || item.to_member_id === member.id))
@@ -142,9 +143,8 @@ const getSnapshot = (familyId: string) => {
         : null
       return {
         id: member.id,
-        parentId: parent?.from_member_id ?? null,
+        parentIds,
         spouseId,
-        familyName: member.branch_name,
         generation: generations.get(member.id) ?? 1,
         name: member.name,
         nickName: member.nickname ?? undefined,
@@ -171,38 +171,48 @@ const assertMemberInFamily = (memberId: string, familyId: string): void => {
   if (!found) throw new AppError(400, '关联成员不存在或不属于当前家庭', 'INVALID_RELATED_MEMBER')
 }
 
-const replaceSimpleRelationships = (
+const replaceMemberRelationships = (
   familyId: string,
   memberId: string,
-  parentId: string | null | undefined,
+  parentIds: string[],
   spouseId: string | null | undefined,
   userId: string,
 ): void => {
-  if (parentId !== undefined) {
+  if (parentIds.includes(memberId)) {
+    throw new AppError(400, '成员不能设为自己的父母', 'INVALID_RELATED_MEMBER')
+  }
+  db.prepare("DELETE FROM relationships WHERE family_id = ? AND to_member_id = ? AND type = 'parent'")
+    .run(familyId, memberId)
+  parentIds.forEach(parentId => {
     if (parentId === memberId) {
       throw new AppError(400, '成员不能设为自己的父母', 'INVALID_RELATED_MEMBER')
     }
-    db.prepare("DELETE FROM relationships WHERE family_id = ? AND to_member_id = ? AND type = 'parent'")
-      .run(familyId, memberId)
-    if (parentId) {
-      assertMemberInFamily(parentId, familyId)
-      db.prepare(`
-        INSERT INTO relationships (id, family_id, from_member_id, to_member_id, type, created_by, created_at)
-        VALUES (?, ?, ?, ?, 'parent', ?, ?)
-      `).run(randomUUID(), familyId, parentId, memberId, userId, now())
-    }
-  }
+    assertMemberInFamily(parentId, familyId)
+    db.prepare(`
+      INSERT INTO relationships (id, family_id, from_member_id, to_member_id, type, created_by, created_at)
+      VALUES (?, ?, ?, ?, 'parent', ?, ?)
+    `).run(randomUUID(), familyId, parentId, memberId, userId, now())
+  })
 
   if (spouseId !== undefined) {
     if (spouseId === memberId) {
       throw new AppError(400, '成员不能设为自己的配偶', 'INVALID_RELATED_MEMBER')
+    }
+    if (spouseId) {
+      assertMemberInFamily(spouseId, familyId)
+      const occupied = db.prepare(`
+        SELECT 1 FROM relationships
+        WHERE family_id = ? AND type = 'spouse'
+          AND (from_member_id = ? OR to_member_id = ?)
+          AND from_member_id <> ? AND to_member_id <> ?
+      `).get(familyId, spouseId, spouseId, memberId, memberId)
+      if (occupied) throw new AppError(400, '所选成员已有配偶，请先解除原关系', 'SPOUSE_ALREADY_LINKED')
     }
     db.prepare(`
       DELETE FROM relationships
       WHERE family_id = ? AND type = 'spouse' AND (from_member_id = ? OR to_member_id = ?)
     `).run(familyId, memberId, memberId)
     if (spouseId) {
-      assertMemberInFamily(spouseId, familyId)
       const [fromId, toId] = [memberId, spouseId].sort()
       db.prepare(`
         INSERT OR IGNORE INTO relationships
@@ -334,16 +344,16 @@ app.post('/api/families/:familyId/members', (request: Request, response) => {
   transaction(() => {
     db.prepare(`
       INSERT INTO members (
-        id, family_id, branch_name, generation, name, nickname, relation_label,
+        id, family_id, generation, name, nickname, relation_label,
         birth_year, gender, birthday_type, birth_month, birth_day, is_leap_month,
         created_by, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
-      memberId, familyId, input.branchName, 1, input.name, input.nickName ?? null,
+      memberId, familyId, 1, input.name, input.nickName ?? null,
       input.relation, input.birthYear, input.gender, input.birthdayType, input.birthMonth,
       input.birthDay, input.isLeapMonth ? 1 : 0, authUser.id, timestamp, timestamp,
     )
-    replaceSimpleRelationships(familyId, memberId, input.parentId, input.spouseId, authUser.id)
+    replaceMemberRelationships(familyId, memberId, input.parentIds, input.spouseId, authUser.id)
     syncFamilyGenerations(familyId)
     db.prepare('UPDATE families SET updated_at = ? WHERE id = ?').run(timestamp, familyId)
     audit(familyId, authUser.id, 'create', 'member', memberId, { name: input.name })
@@ -361,15 +371,15 @@ app.patch('/api/families/:familyId/members/:memberId', (request: Request, respon
   const timestamp = now()
   transaction(() => {
     db.prepare(`
-      UPDATE members SET branch_name = ?, name = ?, nickname = ?, relation_label = ?,
+      UPDATE members SET name = ?, nickname = ?, relation_label = ?,
         birth_year = ?, gender = ?, birthday_type = ?, birth_month = ?, birth_day = ?,
         is_leap_month = ?, updated_at = ? WHERE id = ? AND family_id = ?
     `).run(
-      input.branchName, input.name, input.nickName ?? null, input.relation,
+      input.name, input.nickName ?? null, input.relation,
       input.birthYear, input.gender, input.birthdayType, input.birthMonth, input.birthDay,
       input.isLeapMonth ? 1 : 0, timestamp, memberId, familyId,
     )
-    replaceSimpleRelationships(familyId, memberId, input.parentId, input.spouseId, authUser.id)
+    replaceMemberRelationships(familyId, memberId, input.parentIds, input.spouseId, authUser.id)
     syncFamilyGenerations(familyId)
     db.prepare('UPDATE families SET updated_at = ? WHERE id = ?').run(timestamp, familyId)
     audit(familyId, authUser.id, 'update', 'member', memberId, { name: input.name })
@@ -420,10 +430,12 @@ app.post('/api/invitations/:code/accept', (request: Request, response) => {
     throw new AppError(404, '邀请码不存在或已失效', 'INVITATION_INVALID')
   }
   transaction(() => {
-    db.prepare(`
+    const joined = db.prepare(`
       INSERT OR IGNORE INTO family_users (family_id, user_id, role, joined_at) VALUES (?, ?, ?, ?)
     `).run(invitation.family_id, authUser.id, invitation.role, now())
-    db.prepare('UPDATE invitations SET used_count = used_count + 1 WHERE id = ?').run(invitation.id)
+    if (Number(joined.changes) > 0) {
+      db.prepare('UPDATE invitations SET used_count = used_count + 1 WHERE id = ?').run(invitation.id)
+    }
     audit(invitation.family_id, authUser.id, 'accept', 'invitation', invitation.id)
   })
   response.json({ familyId: invitation.family_id })

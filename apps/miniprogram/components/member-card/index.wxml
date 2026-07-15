@@ -23,8 +23,4 @@
   <!-- 年龄 -->
   <text class="member-card__age">{{age !== null ? age + '岁' : '-岁'}}</text>
 
-  <!-- 家族标签 -->
-  <view class="member-card__family-tag" style="background: {{color}}1a; color: {{color}};">
-    <text>{{member.familyName}}</text>
-  </view>
 </view>

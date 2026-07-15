@@ -1,23 +1,21 @@
 export interface FamilyMember {
   id: string;
-  parentId: string | null;
+  parentIds: string[];
   spouseId: string | null;
-  familyName: string;
   generation: number;
   name: string;
   nickName?: string;
   relation: string;
   birthYear: number | null;
-  gender: "male" | "female";
-  birthdayType: "solar" | "lunar";
-  birthMonth: number;
-  birthDay: number;
+  gender: "male" | "female" | "unknown";
+  birthdayType: "solar" | "lunar" | null;
+  birthMonth: number | null;
+  birthDay: number | null;
   isLeapMonth?: boolean;
 }
 
 export interface FamilyStats {
   totalMembers: number;
-  familyBranches: string[];
   todayBirthdays: number;
   upcomingBirthdays: number;
 }

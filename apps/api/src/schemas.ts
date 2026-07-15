@@ -13,18 +13,37 @@ export const familySchema = z.object({
 })
 
 export const memberSchema = z.object({
-  branchName: z.string().trim().min(1).max(30),
   name: z.string().trim().min(1).max(30),
   nickName: optionalTrimmed,
   relation: z.string().trim().max(20).optional().default(''),
   birthYear: z.number().int().min(1800).max(2200).nullable(),
-  gender: z.enum(['male', 'female']),
-  birthdayType: z.enum(['solar', 'lunar']),
-  birthMonth: z.number().int().min(1).max(12),
-  birthDay: z.number().int().min(1).max(31),
+  gender: z.enum(['male', 'female', 'unknown']),
+  birthdayType: z.enum(['solar', 'lunar']).nullable(),
+  birthMonth: z.number().int().min(1).max(12).nullable(),
+  birthDay: z.number().int().min(1).max(31).nullable(),
   isLeapMonth: z.boolean().optional().default(false),
-  parentId: z.string().uuid().nullable().optional(),
+  parentIds: z.array(z.string().uuid()).max(2).optional().default([]),
   spouseId: z.string().uuid().nullable().optional(),
+}).superRefine((input, context) => {
+  const birthdayParts = [input.birthdayType, input.birthMonth, input.birthDay]
+  const hasSomeBirthday = birthdayParts.some(value => value !== null)
+  const hasFullBirthday = birthdayParts.every(value => value !== null)
+  if (hasSomeBirthday && !hasFullBirthday) {
+    context.addIssue({ code: 'custom', message: '生日历法、月份和日期需要同时填写', path: ['birthdayType'] })
+  }
+  if (hasFullBirthday && input.birthdayType === 'solar') {
+    const year = input.birthYear ?? 2000
+    const date = new Date(year, input.birthMonth! - 1, input.birthDay!)
+    if (date.getFullYear() !== year || date.getMonth() !== input.birthMonth! - 1 || date.getDate() !== input.birthDay) {
+      context.addIssue({ code: 'custom', message: '公历生日日期无效', path: ['birthDay'] })
+    }
+  }
+  if (hasFullBirthday && input.birthdayType === 'lunar' && input.birthDay! > 30) {
+    context.addIssue({ code: 'custom', message: '农历日期不能超过三十', path: ['birthDay'] })
+  }
+  if (new Set(input.parentIds).size !== input.parentIds.length) {
+    context.addIssue({ code: 'custom', message: '父母不能重复', path: ['parentIds'] })
+  }
 })
 
 export const invitationSchema = z.object({

@@ -1,5 +1,5 @@
 <view class="page">
-<navigation-bar title="家族图谱" back="{{false}}" color="black" background="#f7f3ef" />
+<navigation-bar title="小家谱" back="{{false}}" color="black" background="#f7f3ef" />
 
 <scroll-view class="page__list" scroll-y type="list" enhanced show-scrollbar="{{false}}">
 
@@ -22,10 +22,6 @@
     <view class="stat-card" bindtap="goPage" data-path="/pages/tree/index" hover-class="stat-card--pressed">
       <text class="stat-value">{{statsTotal}}</text>
       <text class="stat-label">成员总数</text>
-    </view>
-    <view class="stat-card" bindtap="goPage" data-path="/pages/tree/index" hover-class="stat-card--pressed">
-      <text class="stat-value">{{statsFamilies}}</text>
-      <text class="stat-label">家族分支</text>
     </view>
     <view class="stat-card stat-card--accent" bindtap="goPage" data-path="/pages/birthday/index" hover-class="stat-card--pressed">
       <text class="stat-value">{{statsTodayCount}}</text>
@@ -97,10 +93,6 @@
       <view class="nav-item" bindtap="goPage" data-path="/pages/birthday/index">
         <text class="nav-icon">🎂</text>
         <text class="nav-label">生日</text>
-      </view>
-      <view class="nav-item" bindtap="goPage" data-path="/pages/timeline/index">
-        <text class="nav-icon">📅</text>
-        <text class="nav-label">时间轴</text>
       </view>
       <view class="nav-item" bindtap="goPage" data-path="/pages/profile/index">
         <text class="nav-icon">👤</text>

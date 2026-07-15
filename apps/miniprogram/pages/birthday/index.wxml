@@ -1,5 +1,5 @@
 <view class="page">
-  <navigation-bar title="生日提醒" back="{{false}}" color="black" background="#f7f3ef" />
+  <navigation-bar title="生日管理" back="{{false}}" color="black" background="#f7f3ef" />
 
   <!-- 搜索 + 过滤 -->
   <view class="toolbar">
@@ -30,23 +30,13 @@
       ><text>阳历</text></view>
     </view>
 
-    <view class="subscribe-panel">
-      <view class="subscribe-panel__info">
-        <text class="subscribe-panel__title">🔔 订阅生日提醒</text>
-        <text class="subscribe-panel__sub">已配置模板 {{subscribeTemplateCount}} 条</text>
-      </view>
-      <view class="subscribe-panel__actions">
-        <view class="subscribe-btn subscribe-btn--primary" bindtap="subscribeNow">
-          <text>立即订阅</text>
-        </view>
-        <view class="subscribe-btn" bindtap="openSubscribeSettings">
-          <text>消息设置</text>
-        </view>
-      </view>
-    </view>
   </view>
 
   <scroll-view class="page__list" scroll-y type="list" enhanced show-scrollbar="{{false}}">
+    <view wx:if="{{monthSections.length === 0}}" class="today-section">
+      <view class="today-header"><text class="today-title">还没有生日资料</text></view>
+      <text class="member-sub">可在家庭与成员管理中逐步补充，不影响先建立家谱。</text>
+    </view>
     <!-- 今日生日特殊区块 -->
     <view wx:if="{{todayMembers.length > 0}}" class="today-section">
       <view class="today-header">

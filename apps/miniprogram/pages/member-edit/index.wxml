@@ -7,15 +7,15 @@
       <input class="input" value="{{form.name}}" data-field="name" bindinput="setText" maxlength="30" placeholder="请输入姓名" />
       <text class="label">昵称</text>
       <input class="input" value="{{form.nickName}}" data-field="nickName" bindinput="setText" maxlength="30" placeholder="可不填" />
-      <text class="label">家族分支 *</text>
-      <input class="input" value="{{form.branchName}}" data-field="branchName" bindinput="setText" maxlength="30" placeholder="例如：莫家" />
       <text class="label">家庭称呼</text>
       <input class="input" value="{{form.relation}}" data-field="relation" bindinput="setText" maxlength="20" placeholder="例如：爸爸、姐姐" />
-      <view class="field"><text class="label">性别</text><picker mode="selector" range="{{genderOptions}}" value="{{genderIndex}}" bindchange="onGenderChange"><view class="picker">{{genderIndex === 0 ? '男' : '女'}} ›</view></picker></view>
+      <view class="field"><text class="label">性别</text><picker mode="selector" range="{{genderOptions}}" value="{{genderIndex}}" bindchange="onGenderChange"><view class="picker">{{genderOptions[genderIndex]}} ›</view></picker></view>
     </view>
 
     <view class="card">
       <text class="section-title">生日</text>
+      <view class="switch-row"><text class="label">知道完整生日</text><switch checked="{{hasBirthday}}" color="#d4756a" bindchange="onHasBirthdayChange" /></view>
+      <block wx:if="{{hasBirthday}}">
       <text class="label">历法</text>
       <picker mode="selector" range="{{birthdayTypeOptions}}" value="{{birthdayTypeIndex}}" bindchange="onBirthdayTypeChange"><view class="picker">{{birthdayTypeIndex === 0 ? '农历' : '阳历'}} ›</view></picker>
       <view wx:if="{{form.birthdayType === 'lunar'}}" class="switch-row">
@@ -23,17 +23,21 @@
         <switch checked="{{form.isLeapMonth}}" color="#d4756a" bindchange="onLeapMonthChange" />
       </view>
       <view class="three-cols">
-        <view class="field"><text class="label">出生年份</text><input class="input" type="number" value="{{form.birthYear}}" data-field="birthYear" bindinput="setNumber" placeholder="可不填" /></view>
         <view class="field"><text class="label">月</text><input class="input" type="number" value="{{form.birthMonth}}" data-field="birthMonth" bindinput="setNumber" /></view>
         <view class="field"><text class="label">日</text><input class="input" type="number" value="{{form.birthDay}}" data-field="birthDay" bindinput="setNumber" /></view>
       </view>
+      </block>
+      <text class="label">出生年份</text>
+      <input class="input" type="number" value="{{form.birthYear}}" data-field="birthYear" bindinput="setNumber" placeholder="不知道可不填" />
     </view>
 
     <view class="card">
       <text class="section-title">亲缘关系</text>
-      <text class="hint">MVP 每位成员先维护一位主要父母和一位配偶，后端关系表支持后续扩展。</text>
-      <text class="label">父/母</text>
-      <picker mode="selector" range="{{memberOptions}}" range-key="name" value="{{parentIndex}}" bindchange="onParentChange"><view class="picker">{{memberOptions[parentIndex].name}} ›</view></picker>
+      <text class="hint">关系可以以后补充；父母和配偶会自动形成双向图谱。</text>
+      <text class="label">父亲</text>
+      <picker mode="selector" range="{{memberOptions}}" range-key="name" value="{{fatherIndex}}" bindchange="onFatherChange"><view class="picker">{{memberOptions[fatherIndex].name}} ›</view></picker>
+      <text class="label">母亲</text>
+      <picker mode="selector" range="{{memberOptions}}" range-key="name" value="{{motherIndex}}" bindchange="onMotherChange"><view class="picker">{{memberOptions[motherIndex].name}} ›</view></picker>
       <text class="label">配偶</text>
       <picker mode="selector" range="{{memberOptions}}" range-key="name" value="{{spouseIndex}}" bindchange="onSpouseChange"><view class="picker">{{memberOptions[spouseIndex].name}} ›</view></picker>
     </view>

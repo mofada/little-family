@@ -8,7 +8,6 @@ interface MemberItem {
   id: string
   name: string
   relation: string
-  branchName: string
   memberJson: string
 }
 
@@ -20,6 +19,7 @@ Component({
     activeFamilyId: '',
     activeFamilyName: '',
     activeRole: '' as FamilySummary['role'] | '',
+    activeRoleLabel: '',
     canEdit: false,
     canInvite: false,
     linkedMemberId: '',
@@ -46,7 +46,6 @@ Component({
           id: member.id,
           name: member.name,
           relation: member.relation,
-          branchName: member.familyName,
           memberJson: JSON.stringify(member),
         }))
         const role = activeFamily?.role ?? ''
@@ -57,6 +56,7 @@ Component({
           activeFamilyId: activeFamily?.id ?? '',
           activeFamilyName: activeFamily?.name ?? '',
           activeRole: role,
+          activeRoleLabel: role === 'owner' ? '所有者' : role === 'admin' ? '管理员' : role === 'editor' ? '可编辑' : role === 'viewer' ? '只读' : '',
           canEdit: role === 'owner' || role === 'admin' || role === 'editor',
           canInvite: role === 'owner' || role === 'admin',
           linkedMemberId: activeFamily?.linkedMemberId ?? snapshot?.family.linkedMemberId ?? '',
@@ -113,6 +113,7 @@ Component({
       const memberId = (e.currentTarget.dataset as { id: string }).id
       try {
         await linkCurrentUser(this.data.activeFamilyId, memberId)
+        invalidateFamilyData()
         await this.loadData()
         wx.showToast({ title: '已设为我', icon: 'success' })
       } catch (error) {

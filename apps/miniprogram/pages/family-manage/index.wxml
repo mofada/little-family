@@ -24,14 +24,14 @@
 
     <view wx:if="{{activeFamilyId}}" class="card">
       <view class="title-row">
-        <view><text class="card-title">家庭成员</text><text class="sub">{{members.length}} 人 · {{activeRole}}</text></view>
+        <view><text class="card-title">家庭成员</text><text class="sub">{{members.length}} 人 · {{activeRoleLabel}}</text></view>
         <view wx:if="{{canEdit}}" class="small-button primary" bindtap="startAdd" hover-class="action-pressed">新增成员</view>
       </view>
-      <view wx:if="{{members.length === 0}}" class="empty"><text>还没有成员，先添加第一位家人吧</text></view>
+      <view wx:if="{{members.length === 0}}" class="empty"><text>先添加你自己，再逐步补充父母、配偶和孩子</text></view>
       <view wx:for="{{members}}" wx:key="id" class="member-row">
         <view class="member-info" bindtap="editMember" data-json="{{item.memberJson}}">
           <text class="member-name">{{item.name}}</text>
-          <text class="sub">{{item.relation || '未设置称呼'}} · {{item.branchName}}</text>
+          <text class="sub">{{item.relation || '未设置称呼'}}</text>
         </view>
         <view class="text-button" bindtap="setAsMe" data-id="{{item.id}}" hover-class="action-pressed">{{linkedMemberId === item.id ? '我 ✓' : '设为我'}}</view>
         <view wx:if="{{canEdit}}" class="text-button danger" bindtap="removeMember" data-id="{{item.id}}" data-name="{{item.name}}" hover-class="action-pressed">删除</view>

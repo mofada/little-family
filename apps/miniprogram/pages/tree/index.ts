@@ -1,4 +1,4 @@
-import { familyMembers, getFamilyColor, getFamilyBranches, calculateAge } from '../../utils/familyData'
+import { familyMembers, getMemberColor, calculateAge } from '../../utils/familyData'
 import { ensureFamilyData } from '../../services/familyStore'
 
 const CARD_W = 186
@@ -12,18 +12,11 @@ const LINE_W = 4
 
 type Member = typeof familyMembers[number]
 
-interface FamilyFilterItem {
-  name: string
-  color: string
-  active: boolean
-}
-
 interface MemberNode {
   id: string
   memberJson: string
   name: string
   relation: string
-  familyName: string
   color: string
   age: number | null
   avatarEmoji: string
@@ -55,20 +48,11 @@ interface UnitLayout extends Unit {
   centerX: number
 }
 
-const MEMBER_JSON_BY_ID: Record<string, string> = Object.fromEntries(
-  familyMembers.map(m => [m.id, JSON.stringify(m)])
-)
-
-const buildDefaultFamilyMap = (allFamilies: string[], currentFamily: string): Record<string, boolean> =>
-  Object.fromEntries(allFamilies.map(name => [name, name === currentFamily]))
-
 let buildTimer: number | null = null
 
 Component({
   data: {
     keyword: '',
-    activeFamilyMap: {} as Record<string, boolean>,
-    familyFilters: [] as FamilyFilterItem[],
     nodes: [] as MemberNode[],
     edgeSegments: [] as EdgeSegment[],
     canvasWidth: 750,
@@ -101,7 +85,7 @@ Component({
   methods: {
     async refreshGraph() {
       try {
-        const snapshot = await ensureFamilyData(true)
+        const snapshot = await ensureFamilyData()
         const currentMemberId = snapshot?.family.linkedMemberId
           ?? familyMembers.find(member => member.relation === '我自己')?.id
           ?? familyMembers[0]?.id
@@ -123,29 +107,14 @@ Component({
     },
 
     buildGraph() {
-      const allFamilies = getFamilyBranches()
       const keyword = this.data.keyword.trim().toLowerCase()
-      const currentFamily = familyMembers.find(member => member.id === this.data.currentMemberId)?.familyName
-        ?? allFamilies[0]
-        ?? ''
-
-      const activeFamilyMap = Object.keys(this.data.activeFamilyMap).length === 0
-        ? buildDefaultFamilyMap(allFamilies, currentFamily)
-        : this.data.activeFamilyMap
-
-      const activeSet = new Set(
-        allFamilies.filter(name => activeFamilyMap[name] !== false)
-      )
-
       const memberById = new Map(familyMembers.map(m => [m.id, m]))
 
-      const activeMembers = familyMembers.filter(m => activeSet.has(m.familyName))
-
       const directMatchedIds = new Set<string>(
-        activeMembers
+        familyMembers
           .filter(m => {
             if (!keyword) return true
-            return [m.name, m.relation, m.nickName ?? '', m.familyName]
+            return [m.name, m.relation, m.nickName ?? '']
               .join('|')
               .toLowerCase()
               .includes(keyword)
@@ -154,14 +123,14 @@ Component({
       )
 
       const visibleIds = new Set<string>()
-      const addIfActive = (id: string | null | undefined) => {
+      const addVisible = (id: string | null | undefined) => {
         if (!id) return
         const member = memberById.get(id)
-        if (!member || !activeSet.has(member.familyName)) return
+        if (!member) return
         visibleIds.add(id)
       }
 
-      directMatchedIds.forEach(id => addIfActive(id))
+      directMatchedIds.forEach(id => addVisible(id))
 
       // 搜索时保留一层亲缘上下文，避免图谱断裂成无意义碎片
       if (keyword) {
@@ -169,17 +138,15 @@ Component({
           const member = memberById.get(id)
           if (!member) return
 
-          addIfActive(member.spouseId)
-          addIfActive(member.parentId)
-
-          if (member.parentId) {
-            const parent = memberById.get(member.parentId)
-            addIfActive(parent?.spouseId)
-          }
+          addVisible(member.spouseId)
+          member.parentIds.forEach(parentId => {
+            addVisible(parentId)
+            addVisible(memberById.get(parentId)?.spouseId)
+          })
 
           familyMembers.forEach(candidate => {
-            if (candidate.parentId === id || candidate.parentId === member.spouseId) {
-              addIfActive(candidate.id)
+            if (candidate.parentIds.includes(id) || (!!member.spouseId && candidate.parentIds.includes(member.spouseId))) {
+              addVisible(candidate.id)
             }
           })
         })
@@ -191,20 +158,13 @@ Component({
       const layouts = this.layoutUnits(units)
       const { nodes, edgeSegments, canvasWidth, canvasHeight } = this.buildGraphPrimitives(layouts)
 
-      const familyFilters: FamilyFilterItem[] = allFamilies.map(name => ({
-        name,
-        color: getFamilyColor(name),
-        active: activeSet.has(name),
-      }))
-
       this.setData({
-        activeFamilyMap,
-        familyFilters,
         nodes,
         edgeSegments,
         canvasWidth,
         canvasHeight,
         visibleCount: nodes.length,
+        totalCount: familyMembers.length,
       })
     },
 
@@ -227,8 +187,8 @@ Component({
 
         if (spouse && !used.has(spouse.id)) {
           members = [member, spouse].sort((a, b) => {
-            const aPrimary = a.parentId !== null
-            const bPrimary = b.parentId !== null
+            const aPrimary = a.parentIds.length > 0
+            const bPrimary = b.parentIds.length > 0
             if (aPrimary !== bPrimary) return aPrimary ? -1 : 1
             return a.id.localeCompare(b.id)
           })
@@ -236,7 +196,7 @@ Component({
 
         const key = members.map(m => m.id).sort().join('_')
         const generation = Math.min(...members.map(m => m.generation))
-        const parentRefId = members.find(m => m.parentId)?.parentId ?? null
+        const parentRefId = members.find(m => m.parentIds.length > 0)?.parentIds[0] ?? null
 
         units.push({ key, members, generation, parentRefId })
 
@@ -266,7 +226,7 @@ Component({
 
         const withDesiredCenter = rowUnits.map(unit => {
           const parentCenters = unit.members
-            .map(m => (m.parentId ? memberCenterX.get(m.parentId) : undefined))
+            .flatMap(m => m.parentIds.map(parentId => memberCenterX.get(parentId)))
             .filter((x): x is number => typeof x === 'number')
 
           const desiredCenter = parentCenters.length > 0
@@ -349,13 +309,12 @@ Component({
 
           nodes.push({
             id: member.id,
-            memberJson: MEMBER_JSON_BY_ID[member.id],
+            memberJson: JSON.stringify(member),
             name: member.name,
             relation: member.relation,
-            familyName: member.familyName,
-            color: getFamilyColor(member.familyName),
+            color: getMemberColor(member),
             age: calculateAge(member.birthYear),
-            avatarEmoji: member.gender === 'male' ? '👨' : '👩',
+            avatarEmoji: member.gender === 'male' ? '👨' : member.gender === 'female' ? '👩' : '👤',
             isMe: member.id === this.data.currentMemberId,
             left,
             top,
@@ -386,8 +345,8 @@ Component({
 
       layouts.forEach(layout => {
         layout.members.forEach(member => {
-          if (!member.parentId) return
-          const parentPos = memberPos.get(member.parentId)
+          member.parentIds.forEach(parentId => {
+          const parentPos = memberPos.get(parentId)
           const childPos = memberPos.get(member.id)
           if (!parentPos || !childPos) return
 
@@ -398,7 +357,7 @@ Component({
           if (toY <= fromY) return
 
           const midY = Math.floor((fromY + toY) / 2)
-          const color = getFamilyColor(member.familyName)
+          const color = getMemberColor(member)
 
           pushSegment(fromX - LINE_W / 2, fromY, LINE_W, midY - fromY, color)
 
@@ -407,6 +366,7 @@ Component({
           pushSegment(hLeft, midY - LINE_W / 2, hWidth, LINE_W, color)
 
           pushSegment(toX - LINE_W / 2, midY, LINE_W, toY - midY, color)
+          })
         })
       })
 
@@ -426,7 +386,7 @@ Component({
           const y = Math.round((leftPos.centerY + rightPos.centerY) / 2)
           const left = Math.min(leftPos.centerX, rightPos.centerX)
           const width = Math.max(Math.abs(rightPos.centerX - leftPos.centerX), LINE_W)
-          pushSegment(left, y - LINE_W / 2, width, LINE_W, getFamilyColor(member.familyName), 0.25)
+          pushSegment(left, y - LINE_W / 2, width, LINE_W, getMemberColor(member), 0.25)
         })
       })
 
@@ -440,22 +400,6 @@ Component({
 
     onSearch(e: WechatMiniprogram.Input) {
       this.setData({ keyword: e.detail.value }, () => this.scheduleBuild(120))
-    },
-
-    toggleFamily(e: WechatMiniprogram.TouchEvent) {
-      const name = (e.currentTarget.dataset as { name: string }).name
-      const next = { ...this.data.activeFamilyMap }
-      next[name] = !next[name]
-      this.setData({ activeFamilyMap: next }, () => this.scheduleBuild())
-    },
-
-    resetFamilyFilters() {
-      const allFamilies = getFamilyBranches()
-      const currentFamily = familyMembers.find(member => member.id === this.data.currentMemberId)?.familyName
-        ?? allFamilies[0]
-        ?? ''
-      const next = buildDefaultFamilyMap(allFamilies, currentFamily)
-      this.setData({ activeFamilyMap: next }, () => this.buildGraph())
     },
 
     onCardTap(e: WechatMiniprogram.TouchEvent) {
