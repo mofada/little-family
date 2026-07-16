@@ -119,6 +119,69 @@ interface KinshipLabelRow {
 
 const sanitizeKinshipLabel = (label: string): string => label.trim().replace(/[，。,.；;：:\s]/g, '').slice(0, 20)
 
+const genderedParentRelation = (member: MemberRow): string => {
+  if (member.gender === 'male') return '爸爸'
+  if (member.gender === 'female') return '妈妈'
+  return '父母'
+}
+
+const genderedChildRelation = (member: MemberRow): string => {
+  if (member.gender === 'male') return '儿子'
+  if (member.gender === 'female') return '女儿'
+  return '子女'
+}
+
+const genderedSpouseRelation = (member: MemberRow): string => {
+  if (member.gender === 'male') return '丈夫'
+  if (member.gender === 'female') return '妻子'
+  return '配偶'
+}
+
+const buildKinshipPaths = (
+  viewerMemberId: string,
+  members: MemberRow[],
+  relationships: RelationshipRow[],
+): Map<string, string | null> => {
+  const memberById = new Map(members.map(member => [member.id, member]))
+  const neighbors = new Map<string, Array<{ member: MemberRow; relation: string }>>()
+  members.forEach(member => neighbors.set(member.id, []))
+
+  relationships.forEach(relationship => {
+    const fromMember = memberById.get(relationship.from_member_id)
+    const toMember = memberById.get(relationship.to_member_id)
+    if (!fromMember || !toMember) return
+
+    if (relationship.type === 'parent') {
+      neighbors.get(toMember.id)?.push({ member: fromMember, relation: genderedParentRelation(fromMember) })
+      neighbors.get(fromMember.id)?.push({ member: toMember, relation: genderedChildRelation(toMember) })
+      return
+    }
+
+    neighbors.get(fromMember.id)?.push({ member: toMember, relation: genderedSpouseRelation(toMember) })
+    neighbors.get(toMember.id)?.push({ member: fromMember, relation: genderedSpouseRelation(fromMember) })
+  })
+
+  const paths = new Map<string, string | null>()
+  paths.set(viewerMemberId, '自己')
+  const queue: Array<{ memberId: string; steps: string[] }> = [{ memberId: viewerMemberId, steps: [] }]
+
+  while (queue.length > 0) {
+    const current = queue.shift()!
+    for (const neighbor of neighbors.get(current.memberId) ?? []) {
+      if (paths.has(neighbor.member.id)) continue
+      const nextSteps = [...current.steps, neighbor.relation]
+      paths.set(neighbor.member.id, nextSteps.join('的'))
+      queue.push({ memberId: neighbor.member.id, steps: nextSteps })
+    }
+  }
+
+  members.forEach(member => {
+    if (!paths.has(member.id)) paths.set(member.id, null)
+  })
+
+  return paths
+}
+
 const inferGenerations = (
   memberIds: string[],
   relationships: RelationshipRow[],
@@ -230,30 +293,24 @@ const refreshKinshipLabels = async (
   let generatedLabels = new Map<string, string>()
   if (targetMembers.length > 0) {
     const viewer = members.find(member => member.id === viewerMemberId)!
+    const kinshipPaths = buildKinshipPaths(viewerMemberId, members, relationships)
+    console.info('[kinship]', JSON.stringify({
+      event: 'refresh_paths_built',
+      viewerIdSuffix: viewer.id.slice(-8),
+      viewerName: viewer.name,
+      targetCount: targetMembers.length,
+      unresolvedTargetCount: targetMembers.filter(member => !kinshipPaths.get(member.id)).length,
+    }))
     generatedLabels = await generateKinshipLabels({
       viewer: {
-        id: viewer.id,
-        name: viewer.name,
         gender: viewer.gender,
         birthYear: viewer.birth_year,
       },
       targets: targetMembers.map(member => ({
         id: member.id,
-        name: member.name,
         gender: member.gender,
         birthYear: member.birth_year,
-        fallback: fallbackKinshipLabel(viewerMemberId, member),
-      })),
-      members: members.map(member => ({
-        id: member.id,
-        name: member.name,
-        gender: member.gender,
-        birthYear: member.birth_year,
-      })),
-      relationships: relationships.map(relationship => ({
-        fromMemberId: relationship.from_member_id,
-        toMemberId: relationship.to_member_id,
-        type: relationship.type,
+        pathText: kinshipPaths.get(member.id) ?? null,
       })),
     })
   }
@@ -607,6 +664,8 @@ app.post('/api/families/:familyId/kinship-labels/refresh', async (request: Reque
   console.info('[kinship]', JSON.stringify({
     event: 'refresh_requested',
     familyIdSuffix: familyId.slice(-8),
+    authUserIdSuffix: authUser.id.slice(-8),
+    linkedMemberIdSuffix: linkedMemberId?.slice(-8) ?? null,
     hasLinkedMember: Boolean(linkedMemberId),
     memberCount: members.length,
     targetCount: linkedMemberId ? Math.max(0, members.length - 1) : 0,

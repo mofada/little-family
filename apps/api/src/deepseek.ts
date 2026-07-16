@@ -2,7 +2,18 @@ import { config } from './config'
 import { AppError } from './types'
 
 interface DeepSeekResponse {
-  choices?: Array<{ message?: { content?: string | null } }>
+  choices?: Array<{
+    finish_reason?: string | null
+    message?: {
+      content?: string | null
+      reasoning_content?: string | null
+    }
+  }>
+  usage?: {
+    prompt_tokens?: number
+    completion_tokens?: number
+    total_tokens?: number
+  }
 }
 
 const textPreview = (value: string, limit = 500): string =>
@@ -21,12 +32,39 @@ const logDeepSeekDiagnostic = (event: string, detail: Record<string, unknown>): 
   }))
 }
 
+const logDeepSeekPayload = (
+  event: string,
+  payload: Record<string, unknown>,
+): void => {
+  if (process.env.DEBUG_DEEPSEEK_PAYLOAD !== 'true') return
+  console.info('[deepseek-payload]', JSON.stringify({ event, ...payload }))
+}
+
+const summarizeDeepSeekResponse = (responseText: string): Record<string, unknown> => {
+  try {
+    const parsed = JSON.parse(responseText) as DeepSeekResponse
+    return {
+      choiceCount: parsed.choices?.length ?? 0,
+      choices: parsed.choices?.map(choice => ({
+        finishReason: choice.finish_reason ?? null,
+        contentLength: choice.message?.content?.length ?? 0,
+        reasoningContentLength: choice.message?.reasoning_content?.length ?? 0,
+      })) ?? [],
+      usage: parsed.usage ?? null,
+    }
+  } catch {
+    return { bodyPreview: textPreview(responseText, 200) }
+  }
+}
+
 const callDeepSeek = async (
   systemPrompt: string,
   userPrompt: string,
   maxTokens: number,
   errorMessage: string,
   errorCode: string,
+  timeoutMs = 15_000,
+  jsonResponse = false,
 ): Promise<string> => {
   let response: globalThis.Response
   try {
@@ -44,14 +82,17 @@ const callDeepSeek = async (
         ],
         max_tokens: maxTokens,
         stream: false,
+        ...(jsonResponse ? { response_format: { type: 'json_object' } } : {}),
       }),
-      signal: AbortSignal.timeout(15_000),
+      signal: AbortSignal.timeout(timeoutMs),
     })
   } catch (error) {
     logDeepSeekDiagnostic('request_failed', {
       code: errorCode,
       error: describeError(error),
       maxTokens,
+      timeoutMs,
+      jsonResponse,
     })
     throw new AppError(502, errorMessage, errorCode)
   }
@@ -69,6 +110,8 @@ const callDeepSeek = async (
       statusText: response.statusText,
       bodyPreview,
       maxTokens,
+      timeoutMs,
+      jsonResponse,
     })
     throw new AppError(502, errorMessage, errorCode)
   }
@@ -81,6 +124,8 @@ const callDeepSeek = async (
       code: errorCode,
       error: describeError(error),
       maxTokens,
+      timeoutMs,
+      jsonResponse,
     })
     throw new AppError(502, errorMessage, errorCode)
   }
@@ -92,8 +137,10 @@ const callDeepSeek = async (
     logDeepSeekDiagnostic('json_parse_failed', {
       code: errorCode,
       error: describeError(error),
-      bodyPreview: textPreview(responseText),
+      responseSummary: summarizeDeepSeekResponse(responseText),
       maxTokens,
+      timeoutMs,
+      jsonResponse,
     })
     throw new AppError(502, errorMessage, errorCode)
   }
@@ -101,8 +148,10 @@ const callDeepSeek = async (
   if (!content) {
     logDeepSeekDiagnostic('empty_content', {
       code: errorCode,
-      bodyPreview: textPreview(responseText),
+      responseSummary: summarizeDeepSeekResponse(responseText),
       maxTokens,
+      timeoutMs,
+      jsonResponse,
     })
     throw new AppError(502, errorMessage, errorCode)
   }
@@ -125,29 +174,59 @@ export const generateBirthdayWish = async (prompt: string): Promise<string> => {
 
 export interface KinshipLabelRequest {
   viewer: {
-    id: string
-    name: string
     gender: 'male' | 'female' | 'unknown'
     birthYear: number | null
   }
   targets: Array<{
     id: string
-    name: string
     gender: 'male' | 'female' | 'unknown'
     birthYear: number | null
-    fallback: string
+    pathText: string | null
   }>
-  members: Array<{
-    id: string
-    name: string
-    gender: 'male' | 'female' | 'unknown'
-    birthYear: number | null
-  }>
-  relationships: Array<{
-    fromMemberId: string
-    toMemberId: string
-    type: 'parent' | 'spouse'
-  }>
+}
+
+const KINSHIP_LABEL_BATCH_SIZE = 1000
+const KINSHIP_LABEL_TIMEOUT_MS = 120_000
+
+const kinshipSystemPrompt = [
+  '你是中文亲属称谓专家。',
+  '根据“当前用户到目标成员的关系链”生成“当前用户如何称呼目标成员”的简体中文称呼。',
+  '输入是一个 JSON 对象：viewer 表示当前登录用户已关联的家庭成员，也就是称呼视角；targets 表示本次需要生成称呼的目标成员。',
+  'viewer 字段说明：gender 是当前用户性别，birthYear 是当前用户出生年份。',
+  'target 字段说明：id 是目标成员唯一标识，gender 是目标成员性别，birthYear 是目标成员出生年份，pathText 是从 viewer 出发到目标成员的中文关系链，例如“妈妈的妈妈的女儿的丈夫”。',
+  'gender 为 male、female 或 unknown；birthYear 可能为 null。',
+  '必须以 pathText 为主要依据推导称呼，不能只按年龄或列表顺序判断。',
+  '如果某个 target 的 pathText 为 null 或空字符串，说明没有找到可用关系链，应返回“亲人”，不要猜测具体称呼。',
+  '只返回 JSON 对象，key 是目标成员 id，value 是称呼。',
+  '最终回答必须写在 message.content 中，不能只输出推理内容。',
+  '称呼要短、自然、适合家庭小程序展示，例如：自己、爸爸、妈妈、哥哥、外甥女、表侄、奶奶、舅妈、姨父。',
+  '同父母或同父/同母的兄弟姐妹，birthYear 更小表示年龄更大，应称哥哥/姐姐；birthYear 更大应称弟弟/妹妹。',
+  '兄弟姐妹的配偶按哥哥/姐姐/弟弟/妹妹关系称嫂子、姐夫、弟妹、妹夫。',
+  '表哥、堂哥、表姐、堂姐的子女不能称为弟弟或妹妹，应称表侄、表侄女、堂侄、堂侄女等下一辈称呼。',
+  '如果需要区分哥哥/弟弟、姐姐/妹妹、姐夫/妹夫、嫂子/弟媳，必须优先根据成员 birthYear 判断年龄；birthYear 越小年龄越大。',
+  '不要输出“姐夫/妹夫”“哥哥/弟弟”这类带斜杠的不确定称呼，除非确实缺少出生年份。',
+  '配偶的亲兄弟姐妹直接按配偶视角称呼为哥哥、弟弟、姐姐、妹妹，不要加“妻子的”或“丈夫的”前缀。',
+  '配偶的兄弟姐妹的配偶也按家庭日常称呼为姐夫、妹夫、嫂子、弟妹，不要加“妻子的”或“丈夫的”前缀。',
+  '不要输出“姻亲”"连襟""妯娌"这种泛称；能按具体亲戚关系称呼时必须输出具体称呼。',
+  // '母亲的母亲的儿子的妻子称为舅妈；母亲的母亲的女儿的丈夫称为姨父。',
+  // '父亲的父亲的妻子称为奶奶；母亲的母亲的丈夫称为外公。',
+  '不要输出解释、Markdown 或代码块。',
+].join('\n')
+
+const kinshipMaxTokens = (targetCount: number): number =>
+  Math.min(12_000, Math.max(6000, targetCount * 240))
+
+const kinshipBatches = (
+  input: KinshipLabelRequest,
+): KinshipLabelRequest[] => {
+  const batches: KinshipLabelRequest[] = []
+  for (let index = 0; index < input.targets.length; index += KINSHIP_LABEL_BATCH_SIZE) {
+    batches.push({
+      ...input,
+      targets: input.targets.slice(index, index + KINSHIP_LABEL_BATCH_SIZE),
+    })
+  }
+  return batches
 }
 
 const parseJsonObject = (content: string): Record<string, unknown> => {
@@ -184,41 +263,93 @@ export const generateKinshipLabels = async (
     throw new AppError(503, '称呼生成服务尚未配置', 'KINSHIP_LABEL_DISABLED')
   }
 
-  const content = await callDeepSeek(
-    [
-      '你是中文亲属称谓专家。',
-      '根据家庭成员、父母关系和配偶关系，生成“当前用户如何称呼目标成员”的简体中文称呼。',
-      '只返回 JSON 对象，key 是目标成员 id，value 是称呼。',
-      '称呼要短、自然、适合家庭小程序展示，例如：自己、爸爸、妈妈、哥哥、外甥女、表侄、奶奶、舅妈、姨父。',
-      '如果需要区分哥哥/弟弟、姐姐/妹妹、姐夫/妹夫、嫂子/弟媳，必须优先根据成员 birthYear 判断年龄；birthYear 越小年龄越大。',
-      '不要输出“姐夫/妹夫”“哥哥/弟弟”这类带斜杠的不确定称呼，除非确实缺少出生年份。',
-      '配偶的亲兄弟姐妹直接按配偶视角称呼为哥哥、弟弟、姐姐、妹妹，不要加“妻子的”或“丈夫的”前缀。',
-      '配偶的兄弟姐妹的配偶也按家庭日常称呼为姐夫、妹夫、嫂子、弟妹，不要加“妻子的”或“丈夫的”前缀。',
-      '不要输出“姻亲”这种泛称；能按具体亲戚关系称呼时必须输出具体称呼。',
-      '母亲的母亲的儿子的妻子称为舅妈；母亲的母亲的女儿的丈夫称为姨父。',
-      '父亲的父亲的妻子称为奶奶；母亲的母亲的丈夫称为外公。',
-      '不要输出解释、Markdown 或代码块。',
-    ].join('\n'),
-    JSON.stringify(input),
-    Math.max(300, input.targets.length * 24),
-    '称呼生成失败',
-    'KINSHIP_LABEL_GENERATION_FAILED',
-  )
-
-  const parsed = parseJsonObject(content)
   const labels = new Map<string, string>()
-  input.targets.forEach(target => {
-    const value = parsed[target.id]
-    if (typeof value !== 'string') return
-    const label = value.trim().replace(/[，。,.；;：:\s]/g, '').slice(0, 20)
-    if (label) labels.set(target.id, label)
-  })
+
+  const batches = kinshipBatches(input)
+  for (const [batchIndex, batch] of batches.entries()) {
+    const maxTokens = kinshipMaxTokens(batch.targets.length)
+    logDeepSeekDiagnostic('kinship_batch_request', {
+      code: 'KINSHIP_LABEL_GENERATION_FAILED',
+      batchIndex: batchIndex + 1,
+      batchCount: batches.length,
+      viewerGender: batch.viewer.gender,
+      viewerBirthYear: batch.viewer.birthYear,
+      targetCount: batch.targets.length,
+      maxTokens,
+      timeoutMs: KINSHIP_LABEL_TIMEOUT_MS,
+    })
+    logDeepSeekPayload('kinship_batch_request_payload', {
+      batchIndex: batchIndex + 1,
+      batchCount: batches.length,
+      messages: [
+        { role: 'system', content: kinshipSystemPrompt },
+        { role: 'user', content: JSON.stringify(batch) },
+      ],
+      request: {
+        viewer: batch.viewer,
+        targets: batch.targets,
+      },
+      deepseekOptions: {
+        model: config.deepseekModel,
+        maxTokens,
+        timeoutMs: KINSHIP_LABEL_TIMEOUT_MS,
+        responseFormat: { type: 'json_object' },
+      },
+    })
+    try {
+      const content = await callDeepSeek(
+        kinshipSystemPrompt,
+        JSON.stringify(batch),
+        maxTokens,
+        '称呼生成失败',
+        'KINSHIP_LABEL_GENERATION_FAILED',
+        KINSHIP_LABEL_TIMEOUT_MS,
+        true,
+      )
+      const parsed = parseJsonObject(content)
+      let batchLabelCount = 0
+      const batchLabels: Record<string, string> = {}
+      batch.targets.forEach(target => {
+        const value = parsed[target.id]
+        if (typeof value !== 'string') return
+        const label = value.trim().replace(/[，。,.；;：:\s]/g, '').slice(0, 20)
+        if (!label) return
+        labels.set(target.id, label)
+        batchLabels[target.id] = label
+        batchLabelCount += 1
+      })
+      logDeepSeekPayload('kinship_batch_response_labels', {
+        batchIndex: batchIndex + 1,
+        batchCount: batches.length,
+        viewer: batch.viewer,
+        labels: batch.targets.map(target => ({
+          id: target.id,
+          label: batchLabels[target.id] ?? null,
+        })),
+        rawResponse: parsed,
+      })
+      logDeepSeekDiagnostic('kinship_batch_success', {
+        code: 'KINSHIP_LABEL_GENERATION_FAILED',
+        batchIndex: batchIndex + 1,
+        batchCount: batches.length,
+        targetCount: batch.targets.length,
+        labelCount: batchLabelCount,
+      })
+    } catch (error) {
+      logDeepSeekDiagnostic('kinship_batch_failed', {
+        code: 'KINSHIP_LABEL_GENERATION_FAILED',
+        batchIndex: batchIndex + 1,
+        batchCount: batches.length,
+        targetCount: batch.targets.length,
+        error: describeError(error),
+      })
+    }
+  }
+
   if (labels.size === 0) {
     logDeepSeekDiagnostic('kinship_no_valid_labels', {
       code: 'KINSHIP_LABEL_GENERATION_FAILED',
       targetCount: input.targets.length,
-      parsedKeyCount: Object.keys(parsed).length,
-      contentPreview: textPreview(content),
     })
     throw new AppError(502, '称呼生成失败', 'KINSHIP_LABEL_GENERATION_FAILED')
   }
