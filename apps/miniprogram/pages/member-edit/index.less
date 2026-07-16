@@ -6,9 +6,49 @@
 .section-title { display: block; font-size: 32rpx; font-weight: 700; color: var(--color-primary); margin-bottom: 22rpx; }
 .label { display: block; font-size: 24rpx; color: var(--color-text-sub); margin: 18rpx 0 8rpx; }
 .input, .picker { box-sizing: border-box; width: 100%; background: var(--color-bg); border-radius: 16rpx; padding: 18rpx 20rpx; font-size: 27rpx; color: var(--color-primary); min-height: 72rpx; }
+.relation-picker { display: flex; align-items: center; justify-content: space-between; gap: 20rpx; }
+.relation-value { min-width: 0; display: flex; flex-direction: column; gap: 4rpx; }
+.relation-meta { max-width: 560rpx; overflow: hidden; color: var(--color-text-sub); font-size: 21rpx; text-overflow: ellipsis; white-space: nowrap; }
+.picker-arrow { flex: none; color: #a99c96; font-size: 34rpx; }
 .two-cols, .three-cols { display: flex; gap: 16rpx; }
 .field { flex: 1; min-width: 0; }
 .hint { display: block; color: var(--color-text-sub); font-size: 23rpx; line-height: 1.6; margin-bottom: 10rpx; }
 .switch-row { display: flex; align-items: center; justify-content: space-between; margin-top: 12rpx; }
-.submit { margin: 28rpx 0; border: 0; border-radius: 20rpx; background: var(--color-accent); color: #fff; font-size: 29rpx; padding: 22rpx; }
+.submit { margin: 28rpx 0; border: 0; border-radius: 20rpx; background: var(--color-accent); color: #fff; font-size: 29rpx; padding: 22rpx; flex:1 1 auto; }
 .submit::after { border: 0; }
+.delete-button { width:160rpx !important; border: 0; border-radius: 20rpx; background: #fff1f1; color: #b91c1c; font-size: 27rpx; padding: 20rpx; }
+.delete-button::after { border: 0; }
+
+.selector-mask { position: fixed; z-index: 20; inset: 0; display: flex; align-items: flex-end; background: rgba(32, 25, 22, .48); }
+.selector-sheet { box-sizing: border-box; width: 100%; height: 76vh; max-height: 1120rpx; display: flex; flex-direction: column; padding: 12rpx 28rpx calc(24rpx + env(safe-area-inset-bottom)); border-radius: 32rpx 32rpx 0 0; background: #fff; }
+.selector-handle { width: 72rpx; height: 8rpx; margin: 0 auto 18rpx; border-radius: 99rpx; background: #ded5d0; }
+.selector-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 22rpx; }
+.selector-title, .selector-count { display: block; }
+.selector-title { color: var(--color-primary); font-size: 34rpx; font-weight: 700; }
+.selector-count { margin-top: 5rpx; color: var(--color-text-sub); font-size: 22rpx; }
+.selector-close { width: 56rpx; height: 56rpx; border-radius: 50%; background: var(--color-bg); color: #8e7f78; font-size: 38rpx; line-height: 52rpx; text-align: center; }
+.selector-search { min-height: 76rpx; display: flex; align-items: center; gap: 14rpx; padding: 0 20rpx; border: 2rpx solid transparent; border-radius: 18rpx; background: var(--color-bg); }
+.selector-search-icon { color: #9d8f88; font-size: 30rpx; }
+.selector-search-input { height: 76rpx; min-width: 0; flex: 1; color: var(--color-primary); font-size: 26rpx; }
+.selector-search-placeholder { color: #b5aaa5; }
+.selector-search-clear { width: 42rpx; height: 42rpx; border-radius: 50%; background: #ded5d0; color: #fff; font-size: 29rpx; line-height: 39rpx; text-align: center; }
+.selector-none, .selector-option { display: flex; align-items: center; min-height: 92rpx; border-bottom: 1rpx solid #f0e9e5; }
+.selector-none { justify-content: space-between; margin-top: 12rpx; padding: 0 12rpx; }
+.selector-list { min-height: 0; flex: 1; }
+.selector-option { gap: 18rpx; padding: 7rpx 12rpx; }
+.selector-avatar { width: 64rpx; height: 64rpx; flex: none; border-radius: 50%; background: #f3dfda; color: var(--color-accent); font-size: 26rpx; font-weight: 700; line-height: 64rpx; text-align: center; }
+.selector-option-body { min-width: 0; flex: 1; }
+.selector-option-name, .selector-option-meta { display: block; }
+.selector-option-name { color: var(--color-primary); font-size: 27rpx; font-weight: 600; }
+.selector-option-meta { margin-top: 4rpx; overflow: hidden; color: var(--color-text-sub); font-size: 21rpx; text-overflow: ellipsis; white-space: nowrap; }
+.selector-check { flex: none; color: var(--color-accent); font-size: 30rpx; font-weight: 700; }
+.selector-empty { padding: 80rpx 20rpx; text-align: center; }
+.selector-empty-title, .selector-empty-hint { display: block; }
+.selector-empty-title { color: var(--color-primary); font-size: 27rpx; font-weight: 600; }
+.selector-empty-hint { margin-top: 10rpx; color: var(--color-text-sub); font-size: 22rpx; }
+
+.footer{
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+}

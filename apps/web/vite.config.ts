@@ -7,7 +7,7 @@ import react from '@vitejs/plugin-react'
 function figmaAssetResolver() {
   return {
     name: 'figma-asset-resolver',
-    resolveId(id) {
+    resolveId(id: string) {
       if (id.startsWith('figma:asset/')) {
         const filename = id.replace('figma:asset/', '')
         return path.resolve(__dirname, 'src/assets', filename)
@@ -33,4 +33,21 @@ export default defineConfig({
 
   // File types to support raw imports. Never add .css, .tsx, or .ts files to this.
   assetsInclude: ['**/*.svg', '**/*.csv'],
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('lunar-javascript')) return 'lunar'
+          if (id.includes('react-router') || id.includes('/react/') || id.includes('/react-dom/')) return 'react-vendor'
+          if (id.includes('lucide-react')) return 'icons'
+        },
+      },
+    },
+  },
+  server: {
+    proxy: {
+      '/api': 'https://family.mofada.cn',
+      '/health': 'https://family.mofada.cn',
+    },
+  },
 })

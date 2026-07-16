@@ -5,22 +5,38 @@ import { rateLimit } from 'express-rate-limit'
 import { ZodError } from 'zod'
 import { config } from './config'
 import { db, transaction } from './db'
-import { createSession, requireAuth, requireFamilyRole, sha256 } from './auth'
-import { exchangeWechatCode } from './wechat'
+import { createSession, requireAuth, requireFamilyRole, resolveWechatUser, sha256 } from './auth'
+import { exchangeWechatCode, exchangeWechatWebsiteCode } from './wechat'
 import {
   birthdaySubscriptionSchema, familySchema, invitationSchema,
   legacyFamilyImportSchema, linkMemberSchema, loginSchema, memberSchema,
+  wechatWebLoginSchema, webLoginSchema,
 } from './schemas'
 import { AppError, type AuthenticatedRequest, type FamilyRole } from './types'
 import { BIRTHDAY_TEMPLATE } from './birthdayTemplate'
 import { getBeijingClock } from './birthdayClock'
-import { generateBirthdayWish } from './deepseek'
+import { generateBirthdayWish, generateKinshipLabels } from './deepseek'
+import { inferKinshipLabel } from './kinship'
 
 const now = (): string => new Date().toISOString()
 
 const birthdayWishRateLimit = rateLimit({
   windowMs: 60_000,
   limit: 10,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+})
+
+const webLoginRateLimit = rateLimit({
+  windowMs: 60_000,
+  limit: 10,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+})
+
+const wechatWebLoginRateLimit = rateLimit({
+  windowMs: 60_000,
+  limit: 20,
   standardHeaders: 'draft-8',
   legacyHeaders: false,
 })
@@ -71,7 +87,7 @@ const isBirthdayToday = (member: MemberRow): boolean => {
   return false
 }
 
-const buildBirthdayPrompt = (member: MemberRow): string => {
+const buildBirthdayPrompt = (member: MemberRow, relationLabel: string): string => {
   const age = member.birth_year ? getBeijingClock().year - member.birth_year : null
   return `请模仿中国家庭微信群生日祝福风格生成文案。
 要求：
@@ -84,7 +100,7 @@ const buildBirthdayPrompt = (member: MemberRow): string => {
 
 生日的人：
 姓名：${member.name}${member.nickname ? `（${member.nickname}）` : ''}
-称呼：${member.relation_label}
+称呼：${relationLabel}
 性别：${member.gender === 'male' ? '男' : '女'}
 年龄：${age !== null ? `${age}岁` : '未知'}
 生日：${member.birthday_type === 'lunar' ? `农历${member.is_leap_month ? '闰' : ''}` : '阳历'}${member.birth_month}月${member.birth_day}日`
@@ -96,6 +112,13 @@ interface RelationshipRow {
   to_member_id: string
   type: 'parent' | 'spouse'
 }
+
+interface KinshipLabelRow {
+  to_member_id: string
+  label: string
+}
+
+const sanitizeKinshipLabel = (label: string): string => label.trim().replace(/[，。,.；;：:\s]/g, '').slice(0, 20)
 
 const inferGenerations = (
   memberIds: string[],
@@ -161,7 +184,88 @@ const syncFamilyGenerations = (familyId: string): void => {
   })
 }
 
-const getSnapshot = (familyId: string) => {
+const clearFamilyKinshipLabels = (familyId: string): void => {
+  db.prepare('DELETE FROM kinship_labels WHERE family_id = ?').run(familyId)
+}
+
+const loadKinshipLabels = async (
+  familyId: string,
+  viewerMemberId: string | null | undefined,
+  members: MemberRow[],
+  relationships: RelationshipRow[],
+): Promise<Map<string, string>> => {
+  const labels = new Map<string, string>()
+  if (!viewerMemberId || !members.some(member => member.id === viewerMemberId)) return labels
+  labels.set(viewerMemberId, '自己')
+
+  const cachedRows = db.prepare(`
+    SELECT to_member_id, label FROM kinship_labels
+    WHERE family_id = ? AND from_member_id = ?
+  `).all(familyId, viewerMemberId) as unknown as KinshipLabelRow[]
+  cachedRows.forEach(row => {
+    if (members.some(member => member.id === row.to_member_id)) labels.set(row.to_member_id, row.label)
+  })
+
+  const missingMembers = members.filter(member => !labels.has(member.id))
+  if (missingMembers.length === 0) return labels
+
+  const fallbackLabels = new Map(missingMembers.map(member => [
+    member.id,
+    inferKinshipLabel(viewerMemberId, member.id, members, relationships),
+  ]))
+  let generatedLabels: Map<string, string> | null = null
+  let source: 'deepseek' | 'heuristic' = 'heuristic'
+  try {
+    const viewer = members.find(member => member.id === viewerMemberId)!
+    generatedLabels = await generateKinshipLabels({
+      viewer: {
+        id: viewer.id,
+        name: viewer.name,
+        gender: viewer.gender,
+        birthYear: viewer.birth_year,
+      },
+      targets: missingMembers.map(member => ({
+        id: member.id,
+        name: member.name,
+        gender: member.gender,
+        birthYear: member.birth_year,
+        fallback: fallbackLabels.get(member.id) ?? '亲人',
+      })),
+      members: members.map(member => ({
+        id: member.id,
+        name: member.name,
+        gender: member.gender,
+        birthYear: member.birth_year,
+      })),
+      relationships: relationships.map(relationship => ({
+        fromMemberId: relationship.from_member_id,
+        toMemberId: relationship.to_member_id,
+        type: relationship.type,
+      })),
+    })
+    source = 'deepseek'
+  } catch {
+    generatedLabels = fallbackLabels
+  }
+
+  const timestamp = now()
+  const upsert = db.prepare(`
+    INSERT INTO kinship_labels
+      (id, family_id, from_member_id, to_member_id, label, source, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(family_id, from_member_id, to_member_id)
+    DO UPDATE SET label = excluded.label, source = excluded.source, updated_at = excluded.updated_at
+  `)
+  missingMembers.forEach(member => {
+    const label = sanitizeKinshipLabel(generatedLabels?.get(member.id) ?? fallbackLabels.get(member.id) ?? '亲人') || '亲人'
+    labels.set(member.id, label)
+    upsert.run(randomUUID(), familyId, viewerMemberId, member.id, label, source, timestamp, timestamp)
+  })
+
+  return labels
+}
+
+const getSnapshot = async (familyId: string, viewerMemberId?: string | null) => {
   const members = db.prepare(`
     SELECT id, name, nickname, relation_label, birth_year,
            gender, birthday_type, birth_month, birth_day, is_leap_month, created_at
@@ -172,6 +276,7 @@ const getSnapshot = (familyId: string) => {
     FROM relationships WHERE family_id = ?
   `).all(familyId) as unknown as RelationshipRow[]
   const generations = inferGenerations(members.map(member => member.id), relationships)
+  const kinshipLabels = await loadKinshipLabels(familyId, viewerMemberId, members, relationships)
   members.sort((a, b) => (generations.get(a.id)! - generations.get(b.id)!) || a.created_at.localeCompare(b.created_at))
 
   return {
@@ -192,7 +297,7 @@ const getSnapshot = (familyId: string) => {
         generation: generations.get(member.id) ?? 1,
         name: member.name,
         nickName: member.nickname ?? undefined,
-        relation: member.relation_label,
+        relation: kinshipLabels.get(member.id) ?? inferKinshipLabel(viewerMemberId, member.id, members, relationships),
         birthYear: member.birth_year,
         gender: member.gender,
         birthdayType: member.birthday_type,
@@ -289,16 +394,7 @@ app.post('/api/auth/wechat', async (request, response) => {
     throw new AppError(400, '缺少登录凭证')
   }
 
-  const timestamp = now()
-  let user = db.prepare('SELECT id, openid, nickname, avatar_url FROM users WHERE openid = ?')
-    .get(identity.openid) as { id: string; openid: string; nickname: string | null; avatar_url: string | null } | undefined
-  if (!user) {
-    const id = randomUUID()
-    db.prepare(`
-      INSERT INTO users (id, openid, unionid, created_at, updated_at) VALUES (?, ?, ?, ?, ?)
-    `).run(id, identity.openid, identity.unionid ?? null, timestamp, timestamp)
-    user = { id, openid: identity.openid, nickname: null, avatar_url: null }
-  }
+  const user = resolveWechatUser('miniprogram', identity)
   const session = createSession(user.id)
   const families = db.prepare(`
     SELECT families.id, families.name, families.description, family_users.role
@@ -313,7 +409,96 @@ app.post('/api/auth/wechat', async (request, response) => {
   })
 })
 
+app.post('/api/auth/web', webLoginRateLimit, (request, response) => {
+  const input = webLoginSchema.parse(request.body)
+  const codeHash = sha256(input.code)
+  const timestamp = now()
+  const session = transaction(() => {
+    const loginCode = db.prepare(`
+      SELECT id, user_id FROM web_login_codes
+      WHERE code_hash = ? AND used_at IS NULL AND expires_at > ?
+    `).get(codeHash, timestamp) as { id: string; user_id: string } | undefined
+    if (!loginCode) {
+      throw new AppError(401, '登录码不存在、已使用或已过期', 'WEB_LOGIN_CODE_INVALID')
+    }
+    db.prepare('UPDATE web_login_codes SET used_at = ? WHERE id = ?').run(timestamp, loginCode.id)
+    return createSession(loginCode.user_id)
+  })
+  response.json(session)
+})
+
+app.post('/api/auth/wechat-web/url', wechatWebLoginRateLimit, (_request, response) => {
+  if (!config.wechatOpenAppId || !config.wechatOpenAppSecret || !config.wechatOpenRedirectUri) {
+    response.json({ configured: false })
+    return
+  }
+  const state = randomBytes(24).toString('base64url')
+  const timestamp = now()
+  const expiresAt = new Date(Date.now() + 10 * 60_000).toISOString()
+  transaction(() => {
+    db.prepare('DELETE FROM wechat_web_oauth_states WHERE expires_at <= ?').run(timestamp)
+    db.prepare(`
+      INSERT INTO wechat_web_oauth_states (id, state_hash, expires_at, created_at)
+      VALUES (?, ?, ?, ?)
+    `).run(randomUUID(), sha256(state), expiresAt, timestamp)
+  })
+  const query = new URLSearchParams({
+    appid: config.wechatOpenAppId,
+    redirect_uri: config.wechatOpenRedirectUri,
+    response_type: 'code',
+    scope: 'snsapi_login',
+    state,
+  })
+  response.json({
+    configured: true,
+    authorizeUrl: `https://open.weixin.qq.com/connect/qrconnect?${query}#wechat_redirect`,
+  })
+})
+
+app.post('/api/auth/wechat-web', wechatWebLoginRateLimit, async (request, response) => {
+  const input = wechatWebLoginSchema.parse(request.body)
+  const timestamp = now()
+  const oauthState = db.prepare(`
+    SELECT id FROM wechat_web_oauth_states
+    WHERE state_hash = ? AND used_at IS NULL AND expires_at > ?
+  `).get(sha256(input.state), timestamp) as { id: string } | undefined
+  if (!oauthState) {
+    throw new AppError(401, '微信登录请求已过期，请重新扫码', 'WECHAT_WEB_STATE_INVALID')
+  }
+  const consumed = db.prepare(`
+    UPDATE wechat_web_oauth_states SET used_at = ? WHERE id = ? AND used_at IS NULL
+  `).run(timestamp, oauthState.id)
+  if (Number(consumed.changes) !== 1) {
+    throw new AppError(401, '微信登录请求已使用，请重新扫码', 'WECHAT_WEB_STATE_INVALID')
+  }
+  const identity = await exchangeWechatWebsiteCode(input.code)
+  const user = resolveWechatUser('website', identity)
+  response.json(createSession(user.id))
+})
+
 app.use('/api', requireAuth as never)
+
+app.post('/api/auth/web-login-code', (request: Request, response) => {
+  const { authUser } = request as AuthenticatedRequest
+  const code = randomBytes(6).toString('hex').toUpperCase()
+  const timestamp = now()
+  const expiresAt = new Date(Date.now() + 5 * 60_000).toISOString()
+  transaction(() => {
+    db.prepare(`
+      DELETE FROM web_login_codes
+      WHERE expires_at <= ? AND created_at < ?
+    `).run(timestamp, new Date(Date.now() - 7 * 86400000).toISOString())
+    db.prepare(`
+      UPDATE web_login_codes SET used_at = ?
+      WHERE user_id = ? AND used_at IS NULL
+    `).run(timestamp, authUser.id)
+    db.prepare(`
+      INSERT INTO web_login_codes (id, user_id, code_hash, expires_at, created_at)
+      VALUES (?, ?, ?, ?, ?)
+    `).run(randomUUID(), authUser.id, sha256(code), expiresAt, timestamp)
+  })
+  response.status(201).json({ code, expiresAt })
+})
 
 app.delete('/api/auth/session', (request: Request, response) => {
   const authorization = request.header('authorization') ?? ''
@@ -352,7 +537,7 @@ app.post('/api/families', (request: Request, response) => {
   response.status(201).json({ family: { id: familyId, ...input, role: 'owner', memberCount: 0 } })
 })
 
-app.get('/api/families/:familyId/snapshot', (request: Request, response) => {
+app.get('/api/families/:familyId/snapshot', async (request: Request, response) => {
   const { authUser } = request as AuthenticatedRequest
   const familyId = routeParam(request, 'familyId')
   const role = requireFamilyRole(authUser.id, familyId, 'viewer')
@@ -363,7 +548,8 @@ app.get('/api/families/:familyId/snapshot', (request: Request, response) => {
     FROM families JOIN family_users ON family_users.family_id = families.id
     WHERE families.id = ? AND family_users.user_id = ?
   `).get(familyId, authUser.id)
-  response.json({ family: { ...family as object, role }, ...getSnapshot(familyId) })
+  const linkedMemberId = (family as { linkedMemberId?: string | null } | undefined)?.linkedMemberId
+  response.json({ family: { ...family as object, role }, ...await getSnapshot(familyId, linkedMemberId) })
 })
 
 app.patch('/api/families/:familyId/me', (request: Request, response) => {
@@ -376,6 +562,18 @@ app.patch('/api/families/:familyId/me', (request: Request, response) => {
     UPDATE family_users SET linked_member_id = ? WHERE family_id = ? AND user_id = ?
   `).run(input.memberId, familyId, authUser.id)
   response.json({ linkedMemberId: input.memberId })
+})
+
+app.delete('/api/families/:familyId/me', (request: Request, response) => {
+  const { authUser } = request as AuthenticatedRequest
+  const familyId = routeParam(request, 'familyId')
+  const role = requireFamilyRole(authUser.id, familyId, 'viewer')
+  if (role === 'owner') {
+    throw new AppError(400, '家庭所有者不能直接退出家庭', 'OWNER_CANNOT_LEAVE')
+  }
+  db.prepare('DELETE FROM family_users WHERE family_id = ? AND user_id = ?').run(familyId, authUser.id)
+  audit(familyId, authUser.id, 'leave', 'family', familyId)
+  response.status(204).send()
 })
 
 app.get('/api/families/:familyId/birthday-subscriptions/config', (request: Request, response) => {
@@ -431,14 +629,26 @@ app.post('/api/families/:familyId/members/:memberId/birthday-wish', birthdayWish
   if (!isBirthdayToday(member)) {
     throw new AppError(400, '仅可在成员生日当天生成祝福', 'NOT_MEMBER_BIRTHDAY')
   }
-  const wish = await generateBirthdayWish(buildBirthdayPrompt(member))
+  const currentUser = db.prepare(`
+    SELECT linked_member_id AS linkedMemberId FROM family_users WHERE family_id = ? AND user_id = ?
+  `).get(familyId, authUser.id) as { linkedMemberId?: string | null } | undefined
+  const relationships = db.prepare(`
+    SELECT id, from_member_id, to_member_id, type
+    FROM relationships WHERE family_id = ?
+  `).all(familyId) as unknown as RelationshipRow[]
+  const members = db.prepare(`
+    SELECT id, name, gender, birth_year, relation_label FROM members WHERE family_id = ?
+  `).all(familyId) as unknown as MemberRow[]
+  const kinshipLabels = await loadKinshipLabels(familyId, currentUser?.linkedMemberId, members, relationships)
+  const relationLabel = kinshipLabels.get(memberId) ?? inferKinshipLabel(currentUser?.linkedMemberId, memberId, members, relationships)
+  const wish = await generateBirthdayWish(buildBirthdayPrompt(member, relationLabel))
   response.json({ wish })
 })
 
-app.post('/api/families/:familyId/members', (request: Request, response) => {
+app.post('/api/families/:familyId/members', async (request: Request, response) => {
   const { authUser } = request as AuthenticatedRequest
   const familyId = routeParam(request, 'familyId')
-  requireFamilyRole(authUser.id, familyId, 'editor')
+  requireFamilyRole(authUser.id, familyId, 'viewer')
   const input = memberSchema.parse(request.body)
   const memberId = randomUUID()
   const timestamp = now()
@@ -451,15 +661,19 @@ app.post('/api/families/:familyId/members', (request: Request, response) => {
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       memberId, familyId, 1, input.name, input.nickName ?? null,
-      input.relation, input.birthYear, input.gender, input.birthdayType, input.birthMonth,
+      '', input.birthYear, input.gender, input.birthdayType, input.birthMonth,
       input.birthDay, input.isLeapMonth ? 1 : 0, authUser.id, timestamp, timestamp,
     )
     replaceMemberRelationships(familyId, memberId, input.parentIds, input.spouseId, authUser.id)
     syncFamilyGenerations(familyId)
+    clearFamilyKinshipLabels(familyId)
     db.prepare('UPDATE families SET updated_at = ? WHERE id = ?').run(timestamp, familyId)
     audit(familyId, authUser.id, 'create', 'member', memberId, { name: input.name })
   })
-  response.status(201).json({ memberId, ...getSnapshot(familyId) })
+  const linkedMemberId = db.prepare(`
+    SELECT linked_member_id AS linkedMemberId FROM family_users WHERE family_id = ? AND user_id = ?
+  `).get(familyId, authUser.id) as { linkedMemberId?: string | null } | undefined
+  response.status(201).json({ memberId, ...await getSnapshot(familyId, linkedMemberId?.linkedMemberId) })
 })
 
 app.post('/api/families/:familyId/import-legacy', (request: Request, response) => {
@@ -521,6 +735,7 @@ app.post('/api/families/:familyId/import-legacy', (request: Request, response) =
     })
 
     syncFamilyGenerations(familyId)
+    clearFamilyKinshipLabels(familyId)
     if (input.linkedLegacyId) {
       db.prepare(`
         UPDATE family_users SET linked_member_id = ? WHERE family_id = ? AND user_id = ?
@@ -536,12 +751,20 @@ app.post('/api/families/:familyId/import-legacy', (request: Request, response) =
   })
 })
 
-app.patch('/api/families/:familyId/members/:memberId', (request: Request, response) => {
+app.patch('/api/families/:familyId/members/:memberId', async (request: Request, response) => {
   const { authUser } = request as AuthenticatedRequest
   const familyId = routeParam(request, 'familyId')
   const memberId = routeParam(request, 'memberId')
-  requireFamilyRole(authUser.id, familyId, 'editor')
+  const role = requireFamilyRole(authUser.id, familyId, 'viewer')
   assertMemberInFamily(memberId, familyId)
+  if (role !== 'owner') {
+    const currentUser = db.prepare(`
+      SELECT linked_member_id AS linkedMemberId FROM family_users WHERE family_id = ? AND user_id = ?
+    `).get(familyId, authUser.id) as { linkedMemberId?: string | null } | undefined
+    if (currentUser?.linkedMemberId !== memberId) {
+      throw new AppError(403, '只能编辑自己的成员资料', 'MEMBER_EDIT_SELF_ONLY')
+    }
+  }
   const input = memberSchema.parse(request.body)
   const timestamp = now()
   transaction(() => {
@@ -550,28 +773,33 @@ app.patch('/api/families/:familyId/members/:memberId', (request: Request, respon
         birth_year = ?, gender = ?, birthday_type = ?, birth_month = ?, birth_day = ?,
         is_leap_month = ?, updated_at = ? WHERE id = ? AND family_id = ?
     `).run(
-      input.name, input.nickName ?? null, input.relation,
+      input.name, input.nickName ?? null, '',
       input.birthYear, input.gender, input.birthdayType, input.birthMonth, input.birthDay,
       input.isLeapMonth ? 1 : 0, timestamp, memberId, familyId,
     )
     replaceMemberRelationships(familyId, memberId, input.parentIds, input.spouseId, authUser.id)
     syncFamilyGenerations(familyId)
+    clearFamilyKinshipLabels(familyId)
     db.prepare('UPDATE families SET updated_at = ? WHERE id = ?').run(timestamp, familyId)
     audit(familyId, authUser.id, 'update', 'member', memberId, { name: input.name })
   })
-  response.json({ ...getSnapshot(familyId) })
+  const linkedMemberId = db.prepare(`
+    SELECT linked_member_id AS linkedMemberId FROM family_users WHERE family_id = ? AND user_id = ?
+  `).get(familyId, authUser.id) as { linkedMemberId?: string | null } | undefined
+  response.json({ ...await getSnapshot(familyId, linkedMemberId?.linkedMemberId) })
 })
 
 app.delete('/api/families/:familyId/members/:memberId', (request: Request, response) => {
   const { authUser } = request as AuthenticatedRequest
   const familyId = routeParam(request, 'familyId')
   const memberId = routeParam(request, 'memberId')
-  requireFamilyRole(authUser.id, familyId, 'editor')
+  requireFamilyRole(authUser.id, familyId, 'owner')
   assertMemberInFamily(memberId, familyId)
   transaction(() => {
     db.prepare('UPDATE family_users SET linked_member_id = NULL WHERE linked_member_id = ?').run(memberId)
     db.prepare('DELETE FROM members WHERE id = ? AND family_id = ?').run(memberId, familyId)
     syncFamilyGenerations(familyId)
+    clearFamilyKinshipLabels(familyId)
     db.prepare('UPDATE families SET updated_at = ? WHERE id = ?').run(now(), familyId)
     audit(familyId, authUser.id, 'delete', 'member', memberId)
   })
@@ -581,7 +809,7 @@ app.delete('/api/families/:familyId/members/:memberId', (request: Request, respo
 app.post('/api/families/:familyId/invitations', (request: Request, response) => {
   const { authUser } = request as AuthenticatedRequest
   const familyId = routeParam(request, 'familyId')
-  requireFamilyRole(authUser.id, familyId, 'admin')
+  requireFamilyRole(authUser.id, familyId, 'owner')
   const input = invitationSchema.parse(request.body)
   const code = randomBytes(9).toString('base64url')
   const expiresAt = new Date(Date.now() + input.expiresInHours * 3600000).toISOString()

@@ -134,11 +134,22 @@ export const linkCurrentUser = async (familyId: string, memberId: string | null)
   await request(`/api/families/${familyId}/me`, 'PATCH', { memberId })
 }
 
+export const leaveFamily = async (familyId: string): Promise<void> => {
+  await ensureAuth()
+  await request(`/api/families/${familyId}/me`, 'DELETE')
+  if (getActiveFamilyId() === familyId) wx.removeStorageSync(ACTIVE_FAMILY_KEY)
+}
+
 export const createInvitation = async (familyId: string): Promise<{ code: string; expiresAt: string }> => {
   await ensureAuth()
   return request(`/api/families/${familyId}/invitations`, 'POST', {
     role: 'editor', maxUses: 1, expiresInHours: 72,
   })
+}
+
+export const createWebLoginCode = async (): Promise<{ code: string; expiresAt: string }> => {
+  await ensureAuth()
+  return request('/api/auth/web-login-code', 'POST')
 }
 
 export const acceptInvitation = async (code: string): Promise<string> => {

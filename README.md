@@ -1,6 +1,6 @@
 # 小家记（Little Family）
 
-小家记是一个包含微信小程序和自建 Node.js API 的 Monorepo。当前支持微信登录、私有家庭空间、成员维护、亲缘图谱、北京时间 08:00 生日订阅提醒和家庭邀请码，目录已为未来 Web 端和共享包预留扩展位置。
+小家记是一个包含微信小程序、React H5 和自建 Node.js API 的 Monorepo。当前支持微信登录、网页版一次性登录码、私有家庭空间、成员维护、亲缘图谱、北京时间 08:00 生日订阅提醒和家庭邀请码。
 
 当前产品以“家庭关系档案 + 生日管理 + 家庭协作维护”为核心。成员仅要求姓名，可选填性别、出生年份和完整生日；每位成员最多关联两位父母和一位配偶。小程序使用“首页、图谱、时间轴、生日、我的”五个主导航，不再维护独立的家族分支字段。
 
@@ -10,7 +10,8 @@
 little-family/
 ├─ apps/
 │  ├─ api/                 Node.js + Express + SQLite API
-│  └─ miniprogram/         微信原生 TypeScript 小程序
+│  ├─ miniprogram/         微信原生 TypeScript 小程序
+│  └─ web/                 React + Vite H5
 ├─ packages/               未来共享 contracts、SDK、UI
 ├─ scripts/                仓库级资源生成脚本
 ├─ compose.yaml            API 单机容器部署
@@ -18,7 +19,7 @@ little-family/
 └─ project.config.json     微信开发者工具项目配置
 ```
 
-`apps/api` 是 npm workspace。小程序保留独立的 `package.json` 和锁文件，因为微信开发者工具需要在小程序源码目录内执行“构建 npm”，不参与根 workspace 的依赖提升。
+`apps/api` 和 `apps/web` 是 npm workspace。小程序保留独立的 `package.json` 和锁文件，因为微信开发者工具需要在小程序源码目录内执行“构建 npm”，不参与根 workspace 的依赖提升。
 
 ## 环境要求
 
@@ -43,10 +44,13 @@ npm run check
 
 ```bash
 npm run dev:api             # 启动 API 开发服务器
+npm run dev:web             # 启动 Web 开发服务器
 npm run build:api           # 编译 API 到 apps/api/dist
+npm run build:web           # 构建 Web 到 apps/web/dist
 npm run start:api           # 运行已编译 API
 npm run check:miniprogram   # 检查小程序 TypeScript
 npm run check:api           # 检查 API TypeScript
+npm run check:web           # 检查 Web TypeScript
 npm run check               # 检查全部应用
 npm test                    # 运行 API 自动化测试
 npm run icons:generate      # 重新生成 TabBar 图标
@@ -66,6 +70,9 @@ PORT=3000
 DATABASE_PATH=./data/little-family.db
 WECHAT_APP_ID=你的小程序AppID
 WECHAT_APP_SECRET=你的小程序AppSecret
+WECHAT_OPEN_APP_ID=微信开放平台网站应用AppID
+WECHAT_OPEN_APP_SECRET=微信开放平台网站应用AppSecret
+WECHAT_OPEN_REDIRECT_URI=https://你的Web域名/wechat-callback
 DEEPSEEK_API_KEY=你的DeepSeek API Key
 DEEPSEEK_MODEL=deepseek-v4-flash
 SESSION_DAYS=30
@@ -88,7 +95,9 @@ API 默认地址为 `http://127.0.0.1:3000`，健康检查为 `/health`。
 
 生日当天，小程序可以通过服务端调用 DeepSeek 生成生日祝福并复制。服务端需配置 `DEEPSEEK_API_KEY`，可用 `DEEPSEEK_MODEL` 指定模型（默认 `deepseek-v4-flash`）；未配置或生成失败时，小程序会自动改为复制原始祝福提示词。API Key 不得写入小程序源码。
 
-API 启动时会执行版本化数据库迁移。旧数据库中的 `branch_name` 会在 v1 迁移中移除，同时把生日字段调整为可空；发布前仍应按部署章节备份完整 SQLite 数据目录。
+成员称呼不再手动录入。API 会按“当前登录用户关联的成员 → 目标成员”的视角生成称呼，优先读取 `kinship_labels` 缓存；缺失时批量调用 DeepSeek 生成并回填数据库，失败时使用本地亲缘规则兜底。成员或关系变更后会清空该家庭称呼缓存，下次查询重新生成。
+
+API 启动时会执行版本化数据库迁移。旧数据库中的 `branch_name` 会在 v1 迁移中移除，同时把生日字段调整为可空；当前还会创建 `kinship_labels` 表缓存成员间称呼；发布前仍应按部署章节备份完整 SQLite 数据目录。
 
 小程序开发：
 
@@ -109,9 +118,13 @@ export const API_BASE_URL = 'https://family.mofada.cn'
 API 数据默认位于 `apps/api/data/little-family.db`，包含用户 OpenID、家庭、成员、关系、邀请和审计记录。目录不会提交到 Git。
 
 - 登录令牌只以哈希形式保存。
+- 网页登录码只保存哈希、单次使用且 5 分钟过期；新的登录码会使同用户旧码失效。
+- PC 微信扫码登录使用微信开放平台网站应用，OAuth `state` 只保存哈希、10 分钟过期且只能使用一次。
+- 小程序和网站应用应绑定到同一个微信开放平台账号，服务端通过 UnionID 把两种 OpenID 关联到同一登录用户。
 - AppSecret 只允许出现在 API 的 `.env`。
 - 每条家庭数据按 `family_id` 隔离。
 - 所有写操作由 API 重新校验 owner/admin/editor/viewer 角色。
+- 成员新增、编辑、删除和邀请只允许家庭所有者执行；其他成员只能加入、关联自己或退出家庭。
 - 生产环境必须设置 `ALLOW_DEV_LOGIN=false`。
 
 ### 导入旧版写死数据
@@ -189,6 +202,9 @@ pm2 save
 ```dotenv
 WECHAT_APP_ID=你的小程序AppID
 WECHAT_APP_SECRET=你的小程序AppSecret
+WECHAT_OPEN_APP_ID=微信开放平台网站应用AppID
+WECHAT_OPEN_APP_SECRET=微信开放平台网站应用AppSecret
+WECHAT_OPEN_REDIRECT_URI=https://你的Web域名/wechat-callback
 DEEPSEEK_API_KEY=你的DeepSeek API Key
 DEEPSEEK_MODEL=deepseek-v4-flash
 ```
@@ -202,21 +218,10 @@ curl http://127.0.0.1:3002/health
 
 SQLite 保存在仓库根目录的 `data/little-family.db`（服务器上通常为 `/home/ubuntu/little-family/data/little-family.db`）。`data/` 已被 Git 忽略。PM2 和 Docker 是两种部署方式，不要同时启动同一套 API。
 
-## 增加 Web 端
+## Web 端
 
-建议未来创建：
+Web 保留移动端优先的高保真样式，并使用与小程序相同的家庭快照、权限和生日祝福接口。登录页同时支持微信开放平台扫码登录，以及小程序“家庭与成员管理”生成的一次性登录码。开发、构建和同源部署说明见 [apps/web/README.md](./apps/web/README.md)。
 
-```text
-apps/web/
-```
-
-并将 `apps/web` 加入根 `package.json` 的 `workspaces`。当 Web 与小程序确实需要共用 API 类型或客户端时，再分别创建：
-
-```text
-packages/contracts/
-packages/sdk/
-```
-
-避免为了“看起来共享”而过早耦合微信小程序的构建流程。
+API 启动时会自动创建 `web_login_codes`、`wechat_identities` 和 `wechat_web_oauth_states` 表，分别管理一次性登录码、多端微信身份与扫码登录状态。部署前仍应按现有流程备份 SQLite 数据目录。
 
 协作规则见 [AGENTS.md](./AGENTS.md)。

@@ -19,7 +19,7 @@ NODE_ENV=production
 ALLOW_DEV_LOGIN=false
 ```
 
-生日祝福生成功能还需要配置 `DEEPSEEK_API_KEY`；`DEEPSEEK_MODEL` 可选，默认使用 `deepseek-v4-flash`。DeepSeek 调用失败时，小程序会降级复制本地提示词。
+生日祝福和成员称呼生成功能还需要配置 `DEEPSEEK_API_KEY`；`DEEPSEEK_MODEL` 可选，默认使用 `deepseek-v4-flash`。生日祝福调用失败时，小程序会降级复制本地提示词；称呼生成失败时，API 会使用本地亲缘规则兜底并写入 `kinship_labels` 缓存表。
 
 发布前先在项目根目录验证代码：
 
@@ -27,9 +27,10 @@ ALLOW_DEV_LOGIN=false
 npm ci
 npm run check
 npm run build:api
+npm run build:web
 ```
 
-如果检查或构建失败，不要继续发布。
+如果检查或构建失败，不要继续发布。Web 构建产物位于 `apps/web/dist`，建议由 Caddy/Nginx 作为同域静态站点提供，并把 `/api/*` 与 `/health` 代理到 API。
 
 ## 2. PM2 更新部署
 
@@ -45,6 +46,9 @@ PORT=3002
 DATABASE_PATH=./data/little-family.db
 WECHAT_APP_ID=你的小程序AppID
 WECHAT_APP_SECRET=你的小程序AppSecret
+WECHAT_OPEN_APP_ID=微信开放平台网站应用AppID
+WECHAT_OPEN_APP_SECRET=微信开放平台网站应用AppSecret
+WECHAT_OPEN_REDIRECT_URI=https://你的Web域名/wechat-callback
 DEEPSEEK_API_KEY=你的DeepSeek API Key
 DEEPSEEK_MODEL=deepseek-v4-flash
 SESSION_DAYS=30
@@ -119,6 +123,9 @@ Docker 部署使用仓库根目录的 `compose.yaml`。服务器仓库根目录�
 ```dotenv
 WECHAT_APP_ID=你的小程序AppID
 WECHAT_APP_SECRET=你的小程序AppSecret
+WECHAT_OPEN_APP_ID=微信开放平台网站应用AppID
+WECHAT_OPEN_APP_SECRET=微信开放平台网站应用AppSecret
+WECHAT_OPEN_REDIRECT_URI=https://你的Web域名/wechat-callback
 DEEPSEEK_API_KEY=你的DeepSeek API Key
 DEEPSEEK_MODEL=deepseek-v4-flash
 ```
@@ -199,6 +206,7 @@ curl --fail http://127.0.0.1:3002/health
 - **启动后找不到 `.env` 或数据库位置不对**：检查 PM2 的 `--cwd` 是否为 `apps/api`。
 - **端口被占用**：确认 `.env` 的 `PORT` 与反向代理目标一致；本项目示例使用 3002。
 - **微信登录失败**：检查 `WECHAT_APP_ID`、`WECHAT_APP_SECRET`，以及小程序后台配置的合法请求域名。
+- **PC 扫码登录未启用**：检查 `WECHAT_OPEN_APP_ID`、`WECHAT_OPEN_APP_SECRET`、`WECHAT_OPEN_REDIRECT_URI`，确认网站应用已审核且回调域名一致。若扫码后进入空账号，确认网站应用和小程序绑定在同一个微信开放平台账号，并先重新进入一次小程序刷新 UnionID。
 - **公网访问失败但本机健康检查成功**：检查 Caddy/Nginx 配置、防火墙、DNS 和 HTTPS 证书。
 - **修改环境变量后未生效**：PM2 使用 `pm2 restart little-family-api --update-env`；Docker 使用 `docker compose up -d --force-recreate api`。
-- **数据库字段有变化**：务必先备份。当前 API 启动时会执行建表语句；未来若引入正式迁移脚本，应在发布文档中明确迁移和回滚顺序。
+- **数据库字段有变化**：务必先备份。当前 API 启动时会执行建表语句，包括用于缓存成员间称呼的 `kinship_labels`；未来若引入正式迁移脚本，应在发布文档中明确迁移和回滚顺序。

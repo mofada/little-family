@@ -7,6 +7,15 @@ export const loginSchema = z.union([
   z.object({ devOpenid: z.string().trim().min(3).max(100), code: z.never().optional() }),
 ])
 
+export const webLoginSchema = z.object({
+  code: z.string().trim().min(8).max(32),
+})
+
+export const wechatWebLoginSchema = z.object({
+  code: z.string().trim().min(1).max(512),
+  state: z.string().trim().min(16).max(128),
+})
+
 export const familySchema = z.object({
   name: z.string().trim().min(1).max(30),
   description: z.string().trim().max(200).optional().default(''),

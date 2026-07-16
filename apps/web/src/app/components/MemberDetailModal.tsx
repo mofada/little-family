@@ -1,6 +1,9 @@
-import { X, Cake, Users, MapPin, Copy, Sparkles, GitBranch } from "lucide-react";
+import { useState } from "react";
+import { X, Cake, Users, MapPin, Sparkles, GitBranch, LoaderCircle } from "lucide-react";
 import { FamilyMember } from "../types/family";
 import { familyMembers, calculateAge, getDaysUntilBirthday } from "../data/familyData";
+import { useFamily } from "../context/FamilyContext";
+import { generateBirthdayWish } from "../services/api";
 
 interface MemberDetailModalProps {
   member: FamilyMember;
@@ -8,38 +11,34 @@ interface MemberDetailModalProps {
 }
 
 export default function MemberDetailModal({ member, onClose }: MemberDetailModalProps) {
-  // Find both parents: the direct parent + their spouse
-  const directParent = familyMembers.find(m => m.id === member.parentId);
-  const otherParent = directParent?.spouseId
-    ? familyMembers.find(m => m.id === directParent.spouseId)
-    : undefined;
-  const parents = [directParent, otherParent].filter(Boolean) as FamilyMember[];
+  const { snapshot } = useFamily();
+  const [generating, setGenerating] = useState(false);
+  const [wish, setWish] = useState("");
+  const [actionError, setActionError] = useState("");
+  const parents = member.parentIds
+    .map((parentId) => familyMembers.find(m => m.id === parentId))
+    .filter((parent): parent is FamilyMember => Boolean(parent));
 
   const spouse = familyMembers.find(m => m.id === member.spouseId);
   const children = familyMembers.filter(m =>
-    m.parentId === member.id || (member.spouseId !== null && m.parentId === member.spouseId)
+    m.parentIds.includes(member.id) || (member.spouseId !== null && m.parentIds.includes(member.spouseId))
   );
 
   const daysUntil = getDaysUntilBirthday(member);
 
-  const handleCopyBirthdayPrompt = () => {
-    const prompt = `请模仿中国家庭微信群生日祝福风格生成文案。
-要求：
-- 温馨自然
-- 不要太正式
-- 适合发亲戚群
-- 带 emoji
-- 可以带微信表情：[蛋糕][庆祝][玫瑰]
-- 不同年龄层语气不同
-
-生日的人：
-姓名：${member.name}${member.nickName ? `（${member.nickName}）` : ""}
-称呼：${member.relation}
-性别：${member.gender === "male" ? "男" : "女"}
-年龄：${calculateAge(member.birthYear) ?? "未知"}岁
-生日：${member.birthdayType === "lunar" ? "农历" : "阳历"}${member.birthMonth}月${member.birthDay}日`;
-    navigator.clipboard.writeText(prompt);
-    alert("已复制 AI Prompt！粘贴到 ChatGPT / 文心一言即可生成祝福🎂");
+  const handleGenerateWish = async () => {
+    if (!snapshot || daysUntil !== 0) return;
+    setGenerating(true);
+    setActionError("");
+    try {
+      const generatedWish = await generateBirthdayWish(snapshot.family.id, member.id);
+      setWish(generatedWish);
+      await navigator.clipboard.writeText(generatedWish);
+    } catch (cause) {
+      setActionError(cause instanceof Error ? cause.message : "生成失败");
+    } finally {
+      setGenerating(false);
+    }
   };
 
   return (
@@ -103,14 +102,16 @@ export default function MemberDetailModal({ member, onClose }: MemberDetailModal
                 <p className="text-xs text-gray-500">生日</p>
                 <p className="text-sm" style={{ fontWeight: 500, color: '#3d2f2a' }}>
                   {member.birthYear ? `${member.birthYear}年 ` : ""}
-                  {member.birthdayType === "lunar" ? "农历" : "阳历"} {member.birthMonth}月{member.birthDay}日
+                  {member.birthdayType && member.birthMonth !== null && member.birthDay !== null
+                    ? `${member.birthdayType === "lunar" ? `农历${member.isLeapMonth ? "闰" : ""}` : "阳历"} ${member.birthMonth}月${member.birthDay}日`
+                    : "未记录"}
                 </p>
               </div>
               {daysUntil === 0 ? (
                 <span className="px-2 py-1 bg-[#d4756a]/10 rounded-full text-xs flex-shrink-0" style={{ color: '#d4756a', fontWeight: 600 }}>🎂 今天</span>
-              ) : (
+              ) : daysUntil !== null ? (
                 <span className="px-2 py-1 bg-[#d4a76a]/10 rounded-full text-xs flex-shrink-0" style={{ color: '#d4a76a', fontWeight: 600 }}>还剩 {daysUntil} 天</span>
-              )}
+              ) : null}
             </div>
 
             <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
@@ -186,25 +187,26 @@ export default function MemberDetailModal({ member, onClose }: MemberDetailModal
           )}
 
           {/* Actions */}
-          <div className="space-y-2">
-            <button
-              onClick={handleCopyBirthdayPrompt}
-              className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-[#d4756a] text-white rounded-xl transition-colors hover:bg-[#c06659]"
-              style={{ fontWeight: 600 }}
-            >
-              <Copy className="w-5 h-5" />
-              复制生日祝福 Prompt
-            </button>
-
-            <button
-              onClick={handleCopyBirthdayPrompt}
-              className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-[#6b9d8a] text-white rounded-xl transition-colors hover:bg-[#5a8a77]"
-              style={{ fontWeight: 600 }}
-            >
-              <Sparkles className="w-5 h-5" />
-              生成生日祝福
-            </button>
-          </div>
+          {daysUntil === 0 && (
+            <div className="space-y-2">
+              {wish && (
+                <div className="rounded-2xl bg-[#f0fdf4] border border-[#bbf7d0] p-4 text-sm text-[#315f4f] leading-6">
+                  {wish}
+                  <p className="mt-2 text-xs text-[#6b9d8a]">已复制到剪贴板</p>
+                </div>
+              )}
+              {actionError && <p className="text-sm text-[#c0564b]">{actionError}</p>}
+              <button
+                onClick={() => void handleGenerateWish()}
+                disabled={generating}
+                className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-[#6b9d8a] text-white rounded-xl transition-colors hover:bg-[#5a8a77] disabled:opacity-45 disabled:cursor-not-allowed"
+                style={{ fontWeight: 600 }}
+              >
+                {generating ? <LoaderCircle className="w-5 h-5 animate-spin" /> : <Sparkles className="w-5 h-5" />}
+                {generating ? "正在生成" : "生成生日祝福"}
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router";
-import { Bell, Cake, Clock, Users, GitBranch, Sparkles, Copy, ChevronRight, Heart } from "lucide-react";
+import { Bell, Cake, Clock, Users, GitBranch, Sparkles, LoaderCircle, ChevronRight, Heart } from "lucide-react";
 import {
   familyMembers,
   getTodayBirthdays,
@@ -11,6 +11,8 @@ import {
 } from "../data/familyData";
 import MemberDetailModal from "../components/MemberDetailModal";
 import { FamilyMember } from "../types/family";
+import { useFamily } from "../context/FamilyContext";
+import { generateBirthdayWish } from "../services/api";
 
 // ─── palette copied from TreePage ─────────────────────────────────────
 const FAMILY_PALETTE: Record<string, string> = {
@@ -19,6 +21,7 @@ const FAMILY_PALETTE: Record<string, string> = {
   任家: "#db2777", 谢家: "#d97706",
 };
 const fc = (fam: string) => FAMILY_PALETTE[fam] ?? "#a8866c";
+const memberColor = (member: FamilyMember) => member.gender === "male" ? "#4f7fbf" : member.gender === "female" ? "#d47586" : "#8b817d";
 
 // ─── date helpers ──────────────────────────────────────────────────────
 const WEEKDAYS = ["日", "一", "二", "三", "四", "五", "六"];
@@ -91,15 +94,17 @@ function NavCard({
 // ─── birthday celebration card ────────────────────────────────────────
 function BirthdayCard({
   member,
-  onCopy,
+  onGenerate,
+  generating,
   onView,
 }: {
   member: FamilyMember;
-  onCopy: () => void;
+  onGenerate: () => void;
+  generating: boolean;
   onView: () => void;
 }) {
   const age = calculateAge(member.birthYear);
-  const color = fc(member.familyName);
+  const color = memberColor(member);
   return (
     <div
       className="rounded-2xl overflow-hidden shadow-lg"
@@ -159,11 +164,13 @@ function BirthdayCard({
             <Users size={14} /> 查看详情
           </button>
           <button
-            onClick={onCopy}
+            onClick={onGenerate}
+            disabled={generating}
             className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-sm font-semibold text-white transition-all hover:opacity-90"
             style={{ background: `linear-gradient(135deg, ${color}, ${color}cc)` }}
           >
-            <Copy size={14} /> 复制祝福 Prompt
+            {generating ? <LoaderCircle size={14} className="animate-spin" /> : <Sparkles size={14} />}
+            {generating ? "生成中" : "生成生日祝福"}
           </button>
         </div>
       </div>
@@ -180,8 +187,8 @@ function UpcomingItem({
   onClick: () => void;
 }) {
   const days = getDaysUntilBirthday(member);
-  const color = fc(member.familyName);
-  const urgent = days <= 7;
+  const color = memberColor(member);
+  const urgent = days !== null && days <= 7;
   return (
     <button
       onClick={onClick}
@@ -215,7 +222,7 @@ function UpcomingItem({
           color: urgent ? "#d97706" : color,
         }}
       >
-        {days === 0 ? "🎂 今天" : `${days} 天后`}
+        {days === null ? "未录生日" : days === 0 ? "🎂 今天" : `${days} 天后`}
       </div>
     </button>
   );
@@ -223,28 +230,30 @@ function UpcomingItem({
 
 // ─── main component ────────────────────────────────────────────────────
 export default function HomePage() {
+  const { snapshot } = useFamily();
   const navigate = useNavigate();
   const [selectedMember, setSelectedMember] = useState<FamilyMember | null>(null);
+  const [generatingId, setGeneratingId] = useState<string | null>(null);
+  const [actionMessage, setActionMessage] = useState("");
   const todayBirthdays = getTodayBirthdays();
   const upcomingBirthdays = getUpcomingBirthdays(30);
   const familyBranches = getFamilyBranches();
   const today = new Date();
 
-  const handleCopyPrompt = (member: FamilyMember) => {
-    const prompt = `请模仿中国家庭微信群生日祝福风格生成文案。
-要求：
-- 温馨自然，不要太正式
-- 适合发亲戚群，带 emoji
-- 可以带微信表情：[蛋糕][庆祝][玫瑰]
-- 不同年龄层语气不同
-
-今天生日的人：
-姓名：${member.name}${member.nickName ? `（昵称：${member.nickName}）` : ""}
-称呼：${member.relation}
-性别：${member.gender === "male" ? "男" : "女"}
-年龄：${calculateAge(member.birthYear) ?? "未知"}岁`;
-    navigator.clipboard.writeText(prompt);
-    alert("✅ 已复制 AI Prompt，去 ChatGPT 或微信发送吧！");
+  const handleGenerateWish = async (member: FamilyMember) => {
+    if (!snapshot || getDaysUntilBirthday(member) !== 0 || generatingId) return;
+    setGeneratingId(member.id);
+    setActionMessage("");
+    try {
+      const wish = await generateBirthdayWish(snapshot.family.id, member.id);
+      await navigator.clipboard.writeText(wish);
+      setActionMessage(`已生成并复制 ${member.name} 的生日祝福`);
+    } catch (cause) {
+      setActionMessage(cause instanceof Error ? cause.message : "生日祝福生成失败");
+    } finally {
+      setGeneratingId(null);
+      window.setTimeout(() => setActionMessage(""), 2500);
+    }
   };
 
   return (
@@ -285,7 +294,7 @@ export default function HomePage() {
             <div>
               <p className="text-white/50 text-xs mb-1">{formatDate(today)}</p>
               <h1 className="text-4xl font-black text-white tracking-tight leading-tight">
-                莫氏<br />
+                {snapshot?.family.name}<br />
                 <span style={{ color: "#e8c4a8" }}>家族图谱</span>
               </h1>
               <p className="text-white/55 text-sm mt-2">记录每一位家人，传承每一段故事</p>
@@ -298,9 +307,9 @@ export default function HomePage() {
               <div className="w-11 h-11 bg-white/15 backdrop-blur-sm rounded-2xl flex items-center justify-center border border-white/20">
                 <Bell className="w-5 h-5 text-white" />
               </div>
-              {(todayBirthdays.length + upcomingBirthdays.filter(m => getDaysUntilBirthday(m) <= 7).length) > 0 && (
+              {(todayBirthdays.length + upcomingBirthdays.filter(m => (getDaysUntilBirthday(m) ?? Infinity) <= 7).length) > 0 && (
                 <span className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-[#d4756a] text-white text-[10px] font-bold rounded-full flex items-center justify-center shadow">
-                  {todayBirthdays.length + upcomingBirthdays.filter(m => getDaysUntilBirthday(m) <= 7).length}
+                  {todayBirthdays.length + upcomingBirthdays.filter(m => (getDaysUntilBirthday(m) ?? Infinity) <= 7).length}
                 </span>
               )}
             </button>
@@ -310,7 +319,7 @@ export default function HomePage() {
           <div className="grid grid-cols-4 gap-2">
             {[
               { label: "成员", value: familyMembers.length, emoji: "👥" },
-              { label: "家族", value: familyBranches.length, emoji: "🏠" },
+              { label: "代际", value: Math.max(0, ...familyMembers.map(member => member.generation)), emoji: "🌳" },
               { label: "今日", value: todayBirthdays.length, emoji: "🎂" },
               { label: "近30天", value: upcomingBirthdays.length, emoji: "📅" },
             ].map((s) => (
@@ -325,7 +334,7 @@ export default function HomePage() {
             ))}
           </div>
 
-          {/* Family branches pills */}
+          {/* Current family pill */}
           <div className="flex flex-wrap gap-1.5 mt-4">
             {familyBranches.map((b) => (
               <span
@@ -359,7 +368,8 @@ export default function HomePage() {
                 <BirthdayCard
                   key={m.id}
                   member={m}
-                  onCopy={() => handleCopyPrompt(m)}
+                  onGenerate={() => void handleGenerateWish(m)}
+                  generating={generatingId === m.id}
                   onView={() => setSelectedMember(m)}
                 />
               ))}
@@ -436,7 +446,7 @@ export default function HomePage() {
                   </div>
                 ) : (
                   <div className="bg-white rounded-xl p-3 text-xs text-gray-400 mb-3 border border-green-100">
-                    今日暂无生日，在生日提醒页面点击成员可一键复制祝福 Prompt。
+                    今日暂无生日，生日当天才会显示祝福生成按钮。
                   </div>
                 )}
 
@@ -449,10 +459,12 @@ export default function HomePage() {
                   </button>
                   {todayBirthdays.length > 0 && (
                     <button
-                      onClick={() => handleCopyPrompt(todayBirthdays[0])}
+                      onClick={() => void handleGenerateWish(todayBirthdays[0])}
+                      disabled={generatingId !== null}
                       className="flex items-center gap-1.5 px-4 py-2 bg-[#16a34a] text-white rounded-xl text-sm font-medium hover:bg-[#15803d] transition-colors whitespace-nowrap"
                     >
-                      <Copy size={14} /> 复制Prompt
+                      {generatingId === todayBirthdays[0].id ? <LoaderCircle size={14} className="animate-spin" /> : <Sparkles size={14} />}
+                      {generatingId === todayBirthdays[0].id ? "生成中" : "生成生日祝福"}
                     </button>
                   )}
                 </div>
@@ -489,20 +501,22 @@ export default function HomePage() {
           </section>
         )}
 
-        {/* Family branches visual grid */}
+        {/* Family completeness visual grid */}
         <section>
           <div className="flex items-center gap-2 mb-3">
             <span className="text-lg">🏠</span>
-            <h2 className="font-bold text-[#2d1f1a]">家族分支</h2>
+            <h2 className="font-bold text-[#2d1f1a]">家庭资料</h2>
           </div>
-          <div className="grid grid-cols-3 md:grid-cols-5 gap-2">
-            {familyBranches.map((b) => {
-              const count = familyMembers.filter((m) => m.familyName === b).length;
-              const color = fc(b);
+          <div className="grid grid-cols-3 gap-2">
+            {[
+              { label: "已录生日", count: familyMembers.filter(member => member.birthdayType).length, color: "#d4756a" },
+              { label: "已建关系", count: familyMembers.filter(member => member.parentIds.length || member.spouseId).length, color: "#6b9d8a" },
+              { label: "当前用户", count: snapshot?.family.linkedMemberId ? 1 : 0, color: "#a8866c" },
+            ].map(({ label, count, color }) => {
               return (
                 <button
-                  key={b}
-                  onClick={() => navigate("/tree")}
+                  key={label}
+                  onClick={() => navigate(label === "当前用户" ? "/profile" : "/tree")}
                   className="rounded-2xl p-3 flex flex-col items-center gap-1.5 border transition-all hover:shadow-md active:scale-95"
                   style={{
                     background: `${color}0e`,
@@ -516,7 +530,7 @@ export default function HomePage() {
                     <Heart size={14} style={{ color }} />
                   </div>
                   <p className="text-xs font-bold" style={{ color }}>
-                    {b}
+                    {label}
                   </p>
                   <p className="text-[10px] text-gray-400">{count} 人</p>
                 </button>
@@ -525,6 +539,8 @@ export default function HomePage() {
           </div>
         </section>
       </div>
+
+      {actionMessage && <div className="fixed left-1/2 bottom-20 md:bottom-6 -translate-x-1/2 z-40 rounded-full bg-[#2d1f1a] px-4 py-2 text-sm text-white shadow-xl">{actionMessage}</div>}
 
       {selectedMember && (
         <MemberDetailModal

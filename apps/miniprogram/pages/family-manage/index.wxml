@@ -22,27 +22,45 @@
       </view>
     </view>
 
-    <view wx:if="{{activeFamilyId}}" class="card">
+    <view wx:if="{{activeFamilyId}}" class="card member-entry-card">
       <view class="title-row">
-        <view><text class="card-title">家庭成员</text><text class="sub">{{members.length}} 人 · {{activeRoleLabel}}</text></view>
-        <view wx:if="{{canEdit}}" class="small-button primary" bindtap="startAdd" hover-class="action-pressed">新增成员</view>
+        <view><text class="card-title">成员资料</text><text class="sub">{{members.length}} 人 · {{activeRoleLabel}}</text></view>
+        <view class="small-button primary" bindtap="goBirthday" hover-class="action-pressed">打开生日管理</view>
       </view>
-      <view wx:if="{{members.length === 0}}" class="empty"><text>先添加你自己，再逐步补充父母、配偶和孩子</text></view>
-      <view wx:for="{{members}}" wx:key="id" class="member-row">
-        <view class="member-info" bindtap="editMember" data-json="{{item.memberJson}}">
-          <text class="member-name">{{item.name}}</text>
-          <text class="sub">{{item.relation || '未设置称呼'}}</text>
-        </view>
-        <view class="text-button" bindtap="setAsMe" data-id="{{item.id}}" hover-class="action-pressed">{{linkedMemberId === item.id ? '我 ✓' : '设为我'}}</view>
-        <view wx:if="{{canEdit}}" class="text-button danger" bindtap="removeMember" data-id="{{item.id}}" data-name="{{item.name}}" hover-class="action-pressed">删除</view>
-      </view>
+      <text class="sub">新增、编辑生日和成员关系已经移到“生日管理”，列表里每位成员可直接编辑。</text>
+      <view wx:if="{{activeRole && activeRole !== 'owner'}}" class="full-button muted" bindtap="leaveCurrentFamily" hover-class="action-pressed">退出当前家庭</view>
     </view>
 
     <view wx:if="{{activeFamilyId && canInvite}}" class="card">
       <text class="card-title">邀请亲人</text>
-      <text class="sub">生成一次性编辑者邀请码，72 小时内有效</text>
-      <view class="full-button" bindtap="generateInvite" hover-class="action-pressed">生成并复制邀请码</view>
-      <text wx:if="{{inviteCode}}" class="invite-code">{{inviteCode}}</text>
+      <text class="sub">生成专属邀请后直接发给微信好友，亲人点开即可加入，无需复制邀请码。</text>
+      <view
+        wx:if="{{!inviteCode || inviteFamilyId !== activeFamilyId}}"
+        class="full-button"
+        bindtap="generateInvite"
+        hover-class="action-pressed"
+      >{{generatingInvite ? '正在生成…' : '生成微信邀请'}}</view>
+      <button
+        wx:else
+        class="full-button share-button"
+        open-type="share"
+        hover-class="action-pressed"
+      >发送给微信好友</button>
+      <view wx:if="{{inviteCode && inviteFamilyId === activeFamilyId}}" class="invite-ready">
+        <text class="invite-ready__icon">✓</text>
+        <view class="invite-ready__content">
+          <text class="invite-ready__title">专属邀请已生成</text>
+          <text class="sub">一次有效，72 小时内可使用</text>
+        </view>
+        <view class="regenerate-button" bindtap="generateInvite">重新生成</view>
+      </view>
+    </view>
+
+    <view class="card">
+      <text class="card-title">登录网页版</text>
+      <text class="sub">生成一次性登录码，在网页版输入即可同步查看你的家庭数据；登录码 5 分钟内有效。</text>
+      <view class="full-button" bindtap="generateWebLoginCode" hover-class="action-pressed">生成并复制网页登录码</view>
+      <text wx:if="{{webLoginCode}}" class="invite-code">{{webLoginCode}}</text>
     </view>
   </scroll-view>
 </view>

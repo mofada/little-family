@@ -1,8 +1,16 @@
-import { saveMember, type MemberInput } from '../../services/api'
+import { deleteMember, saveMember, type MemberInput } from '../../services/api'
 import { ensureFamilyData, getCurrentSnapshot, invalidateFamilyData } from '../../services/familyStore'
 import { FamilyMember } from '../../types/family'
 
-interface MemberOption { id: string; name: string }
+type RelationField = 'father' | 'mother' | 'spouse'
+
+interface MemberOption {
+  id: string
+  name: string
+  avatar: string
+  meta: string
+  searchText: string
+}
 
 const emptyForm = (): MemberInput => ({
   name: '', nickName: '', relation: '', birthYear: null,
@@ -13,6 +21,7 @@ const emptyForm = (): MemberInput => ({
 Component({
   data: {
     editingId: '',
+    canDelete: false,
     title: '新增成员',
     form: emptyForm(),
     genderOptions: ['未知', '男', '女'],
@@ -23,7 +32,12 @@ Component({
     fatherIndex: 0,
     motherIndex: 0,
     spouseIndex: 0,
-    memberOptions: [{ id: '', name: '无' }] as MemberOption[],
+    memberOptions: [{ id: '', name: '无', avatar: '', meta: '', searchText: '' }] as MemberOption[],
+    selectorVisible: false,
+    selectorField: 'father' as RelationField,
+    selectorTitle: '选择父亲',
+    selectorKeyword: '',
+    filteredMemberOptions: [] as MemberOption[],
     saving: false,
   },
   lifetimes: {
@@ -40,15 +54,28 @@ Component({
         const raw = wx.getStorageSync('little-family:editing-member') as string
         const editing = raw ? JSON.parse(raw) as FamilyMember : null
         const memberOptions: MemberOption[] = [
-          { id: '', name: '无' },
+          { id: '', name: '无', avatar: '', meta: '', searchText: '' },
           ...snapshot.members
             .filter(member => member.id !== editing?.id)
-            .map(member => ({ id: member.id, name: `${member.name}（${member.relation || '成员'}）` })),
+            .map(member => {
+              const details = [
+                member.relation || '成员',
+                member.nickName ? `昵称：${member.nickName}` : '',
+                member.birthYear ? `${member.birthYear} 年生` : '',
+              ].filter(Boolean)
+              return {
+                id: member.id,
+                name: member.name,
+                avatar: member.name.slice(0, 1),
+                meta: details.join(' · '),
+                searchText: [member.name, member.nickName, member.relation, member.birthYear].filter(Boolean).join(' ').toLowerCase(),
+              }
+            }),
         ]
         const form: MemberInput = editing ? {
           name: editing.name,
           nickName: editing.nickName ?? '',
-          relation: editing.relation,
+          relation: '',
           birthYear: editing.birthYear,
           gender: editing.gender,
           birthdayType: editing.birthdayType,
@@ -67,6 +94,7 @@ Component({
           ?? ''
         this.setData({
           editingId: editing?.id ?? '',
+          canDelete: Boolean(editing?.id && snapshot.family.role === 'owner'),
           title: editing ? '编辑成员' : '新增成员',
           form,
           genderIndex: form.gender === 'unknown' ? 0 : form.gender === 'male' ? 1 : 2,
@@ -76,6 +104,7 @@ Component({
           motherIndex: Math.max(0, memberOptions.findIndex(item => item.id === motherId)),
           spouseIndex: Math.max(0, memberOptions.findIndex(item => item.id === form.spouseId)),
           memberOptions,
+          filteredMemberOptions: memberOptions.slice(1),
         })
       } catch (error) {
         wx.showToast({ title: error instanceof Error ? error.message : '加载失败', icon: 'none' })
@@ -119,23 +148,71 @@ Component({
       this.setData({ 'form.isLeapMonth': e.detail.value })
     },
 
-    onFatherChange(e: WechatMiniprogram.PickerChange) {
-      const index = Number(e.detail.value)
-      const fatherId = this.data.memberOptions[index]?.id || ''
-      const motherId = this.data.memberOptions[this.data.motherIndex]?.id || ''
-      this.setData({ fatherIndex: index, 'form.parentIds': [fatherId, motherId].filter(Boolean) })
+    openMemberSelector(e: WechatMiniprogram.TouchEvent) {
+      const field = (e.currentTarget.dataset as { field: RelationField }).field
+      const titles: Record<RelationField, string> = {
+        father: '选择父亲',
+        mother: '选择母亲',
+        spouse: '选择配偶',
+      }
+      this.setData({
+        selectorVisible: true,
+        selectorField: field,
+        selectorTitle: titles[field],
+        selectorKeyword: '',
+        filteredMemberOptions: this.data.memberOptions.slice(1),
+      })
     },
 
-    onMotherChange(e: WechatMiniprogram.PickerChange) {
-      const index = Number(e.detail.value)
-      const fatherId = this.data.memberOptions[this.data.fatherIndex]?.id || ''
-      const motherId = this.data.memberOptions[index]?.id || ''
-      this.setData({ motherIndex: index, 'form.parentIds': [fatherId, motherId].filter(Boolean) })
+    closeMemberSelector() {
+      this.setData({ selectorVisible: false, selectorKeyword: '' })
     },
 
-    onSpouseChange(e: WechatMiniprogram.PickerChange) {
-      const index = Number(e.detail.value)
-      this.setData({ spouseIndex: index, 'form.spouseId': this.data.memberOptions[index]?.id || null })
+    preventBubble() {},
+
+    onSelectorSearch(e: WechatMiniprogram.Input) {
+      const keyword = e.detail.value.trim().toLowerCase()
+      const filteredMemberOptions = this.data.memberOptions
+        .slice(1)
+        .filter(member => !keyword || member.searchText.includes(keyword))
+      this.setData({ selectorKeyword: e.detail.value, filteredMemberOptions })
+    },
+
+    clearSelectorSearch() {
+      this.setData({
+        selectorKeyword: '',
+        filteredMemberOptions: this.data.memberOptions.slice(1),
+      })
+    },
+
+    selectMember(e: WechatMiniprogram.TouchEvent) {
+      const id = (e.currentTarget.dataset as { id: string }).id
+      this.applyRelationSelection(this.data.selectorField, id)
+    },
+
+    clearRelationSelection() {
+      this.applyRelationSelection(this.data.selectorField, '')
+    },
+
+    applyRelationSelection(field: RelationField, id: string) {
+      const index = Math.max(0, this.data.memberOptions.findIndex(item => item.id === id))
+      if (field === 'spouse') {
+        this.setData({ spouseIndex: index, 'form.spouseId': id || null, selectorVisible: false, selectorKeyword: '' })
+        return
+      }
+
+      const fatherId = field === 'father'
+        ? id
+        : this.data.memberOptions[this.data.fatherIndex]?.id || ''
+      const motherId = field === 'mother'
+        ? id
+        : this.data.memberOptions[this.data.motherIndex]?.id || ''
+      this.setData({
+        [`${field}Index`]: index,
+        'form.parentIds': [fatherId, motherId].filter(Boolean),
+        selectorVisible: false,
+        selectorKeyword: '',
+      })
     },
 
     async submit() {
@@ -166,6 +243,31 @@ Component({
       } finally {
         this.setData({ saving: false })
       }
+    },
+
+    deleteCurrentMember() {
+      if (!this.data.canDelete || !this.data.editingId) return
+      const snapshot = getCurrentSnapshot()
+      if (!snapshot) return
+      wx.showModal({
+        title: `删除 ${this.data.form.name}？`,
+        content: '相关亲缘关系也会一并删除，此操作无法撤销。',
+        success: async result => {
+          if (!result.confirm) return
+          this.setData({ saving: true })
+          try {
+            await deleteMember(snapshot.family.id, this.data.editingId)
+            invalidateFamilyData()
+            wx.removeStorageSync('little-family:editing-member')
+            wx.showToast({ title: '已删除', icon: 'success' })
+            setTimeout(() => wx.navigateBack(), 500)
+          } catch (error) {
+            wx.showToast({ title: error instanceof Error ? error.message : '删除失败', icon: 'none' })
+          } finally {
+            this.setData({ saving: false })
+          }
+        },
+      })
     },
   },
 })

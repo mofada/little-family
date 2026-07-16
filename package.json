@@ -5,15 +5,19 @@
   "description": "小家记多端应用 Monorepo",
   "workspaces": [
     "apps/api",
+    "apps/web",
     "packages/*"
   ],
   "scripts": {
     "dev:api": "npm run dev --workspace @little-family/api",
+    "dev:web": "npm run dev --workspace @little-family/web",
     "build:api": "npm run build --workspace @little-family/api",
+    "build:web": "npm run build --workspace @little-family/web",
     "start:api": "npm run start --workspace @little-family/api",
     "check:miniprogram": "tsc -p apps/miniprogram/tsconfig.json --noEmit",
     "check:api": "npm run check --workspace @little-family/api",
-    "check": "npm run check:miniprogram && npm run check:api",
+    "check:web": "npm run check --workspace @little-family/web",
+    "check": "npm run check:miniprogram && npm run check:api && npm run check:web",
     "test:api": "npm run test --workspace @little-family/api",
     "test": "npm run test:api",
     "import:family": "node scripts/import-family-data.mjs",

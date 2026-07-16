@@ -1,7 +1,9 @@
 import { Outlet, useLocation, useNavigate } from "react-router";
 import { Home, GitBranch, Cake, Clock, User } from "lucide-react";
+import { useFamily } from "../context/FamilyContext";
 
 export default function Layout() {
+  const { snapshot } = useFamily();
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -36,14 +38,14 @@ export default function Layout() {
       {/* Sidebar — desktop only */}
       <aside className="hidden md:flex fixed left-0 top-0 bottom-0 w-56 bg-white border-r border-gray-100 shadow-sm flex-col z-30">
         <div className="px-6 py-6 border-b border-gray-100">
-          <h1 className="text-lg font-semibold" style={{ color: '#3d2f2a' }}>🌿 家族图谱</h1>
+          <h1 className="text-lg font-semibold truncate" style={{ color: '#3d2f2a' }}>🌿 {snapshot?.family.name}</h1>
           <p className="text-xs text-gray-500 mt-1">记录家人，珍藏温暖</p>
         </div>
         <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
           {navItems.map(item => <NavButton key={item.path} item={item} vertical />)}
         </nav>
         <div className="px-6 py-4 border-t border-gray-100">
-          <p className="text-xs text-gray-400">家族图谱 v1.0.0</p>
+          <p className="text-xs text-gray-400">小家记网页版</p>
         </div>
       </aside>
 

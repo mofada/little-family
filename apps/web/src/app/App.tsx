@@ -1,6 +1,6 @@
-import { RouterProvider } from "react-router";
-import { router } from "./routes";
+import AppGate from "./components/AppGate";
+import { FamilyProvider } from "./context/FamilyContext";
 
 export default function App() {
-  return <RouterProvider router={router} />;
+  return <FamilyProvider><AppGate /></FamilyProvider>;
 }

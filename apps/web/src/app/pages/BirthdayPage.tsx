@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { Calendar, Cake, Copy, Search, X } from "lucide-react";
+import { Calendar, Cake, LoaderCircle, Search, Sparkles, X } from "lucide-react";
 import {
   familyMembers,
   getTodayBirthdays,
@@ -9,14 +9,12 @@ import {
 } from "../data/familyData";
 import { FamilyMember } from "../types/family";
 import MemberDetailModal from "../components/MemberDetailModal";
+import { useFamily } from "../context/FamilyContext";
+import { generateBirthdayWish } from "../services/api";
+import { MemberManagePanel } from "./ProfilePage";
 
 // ─── palette ──────────────────────────────────────────────────────────
-const FAMILY_PALETTE: Record<string, string> = {
-  莫家: "#3b82f6", 彭家: "#16a34a", 唐家: "#f97316", 周家: "#9333ea",
-  田家: "#0d9488", 曾家: "#ca8a04", 何家: "#dc2626", 肖家: "#4f46e5",
-  任家: "#db2777", 谢家: "#d97706",
-};
-const fc = (fam: string) => FAMILY_PALETTE[fam] ?? "#a8866c";
+const memberColor = (member: FamilyMember) => member.gender === "male" ? "#4f7fbf" : member.gender === "female" ? "#d47586" : "#8b817d";
 
 const MONTH_NAMES = [
   "一月", "二月", "三月", "四月", "五月", "六月",
@@ -31,28 +29,21 @@ const MONTH_ACCENT = [
   "#0284c7","#7c3aed","#db2777","#d97706","#16a34a","#4f46e5",
 ];
 
-// ─── copy prompt ──────────────────────────────────────────────────────
-function buildPrompt(m: FamilyMember) {
-  return `请模仿中国家庭微信群生日祝福风格生成文案。
-要求：温馨自然、适合发亲戚群、带 emoji、[蛋糕][庆祝][玫瑰]
-
-姓名：${m.name}${m.nickName ? `（${m.nickName}）` : ""}
-称呼：${m.relation}  性别：${m.gender === "male" ? "男" : "女"}  年龄：${calculateAge(m.birthYear) !== null ? calculateAge(m.birthYear) + "岁" : "未知"}`;
-}
-
 // ─── single member row ────────────────────────────────────────────────
 function MemberRow({
   member,
   badge,
   onSelect,
-  onCopy,
+  onGenerate,
+  generating,
 }: {
   member: FamilyMember;
   badge?: React.ReactNode;
   onSelect: () => void;
-  onCopy: () => void;
+  onGenerate?: () => void;
+  generating?: boolean;
 }) {
-  const c = fc(member.familyName);
+  const c = memberColor(member);
   return (
     <div className="flex items-center gap-3 bg-white rounded-2xl px-4 py-3 border border-gray-100 hover:shadow-md transition-shadow group">
       {/* avatar */}
@@ -95,14 +86,17 @@ function MemberRow({
       {/* right side */}
       <div className="flex items-center gap-2 flex-shrink-0">
         {badge}
-        <button
-          onClick={onCopy}
-          className="w-8 h-8 rounded-xl flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-          style={{ background: `${c}18`, color: c }}
-          title="复制祝福 Prompt"
-        >
-          <Copy size={13} />
-        </button>
+        {onGenerate && (
+          <button
+            onClick={onGenerate}
+            disabled={generating}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-50"
+            style={{ background: `linear-gradient(135deg, ${c}, ${c}cc)` }}
+          >
+            {generating ? <LoaderCircle size={13} className="animate-spin" /> : <Sparkles size={13} />}
+            {generating ? "生成中" : "生成祝福"}
+          </button>
+        )}
       </div>
     </div>
   );
@@ -115,18 +109,20 @@ function MonthSection({
   todayIds,
   upcomingIds,
   onSelect,
-  onCopy,
+  onGenerate,
+  generatingId,
 }: {
   month: number;
   members: FamilyMember[];
   todayIds: Set<string>;
   upcomingIds: Map<string, number>;
   onSelect: (m: FamilyMember) => void;
-  onCopy: (m: FamilyMember) => void;
+  onGenerate: (m: FamilyMember) => void;
+  generatingId: string | null;
 }) {
   const bg = MONTH_BG[(month - 1) % 12];
   const accent = MONTH_ACCENT[(month - 1) % 12];
-  const sorted = [...members].sort((a, b) => a.birthDay - b.birthDay);
+  const sorted = [...members].sort((a, b) => (a.birthDay ?? 0) - (b.birthDay ?? 0));
 
   return (
     <div className="rounded-3xl overflow-hidden" style={{ background: bg }}>
@@ -151,7 +147,7 @@ function MonthSection({
             <div
               key={m.id}
               className="w-6 h-6 rounded-full flex items-center justify-center text-xs"
-              style={{ background: `${fc(m.familyName)}25` }}
+              style={{ background: `${memberColor(m)}25` }}
             >
               {m.gender === "male" ? "👦" : "👧"}
             </div>
@@ -195,7 +191,8 @@ function MonthSection({
               member={m}
               badge={badge}
               onSelect={() => onSelect(m)}
-              onCopy={() => onCopy(m)}
+              onGenerate={isToday ? () => onGenerate(m) : undefined}
+              generating={generatingId === m.id}
             />
           );
         })}
@@ -209,10 +206,12 @@ function MonthSection({
 const GEN_LABELS = ["一", "二", "三", "四", "五", "六"];
 
 export default function BirthdayPage() {
+  const { snapshot } = useFamily();
   const [selected, setSelected] = useState<FamilyMember | null>(null);
   const [filter, setFilter] = useState<"all" | "lunar" | "solar">("all");
   const [search, setSearch] = useState("");
-  const [copied, setCopied] = useState<string | null>(null);
+  const [generatingId, setGeneratingId] = useState<string | null>(null);
+  const [actionMessage, setActionMessage] = useState("");
 
   const todayBirthdays = useMemo(() => getTodayBirthdays(), []);
   const upcomingBirthdays = useMemo(() => getUpcomingBirthdays(30), []);
@@ -221,15 +220,28 @@ export default function BirthdayPage() {
     () => new Set(todayBirthdays.map((m) => m.id)),
     [todayBirthdays]
   );
-  const upcomingIds = useMemo(
-    () => new Map(upcomingBirthdays.map((m) => [m.id, getDaysUntilBirthday(m)])),
+  const upcomingIds = useMemo<Map<string, number>>(
+    () => new Map(upcomingBirthdays.flatMap((m) => {
+      const days = getDaysUntilBirthday(m);
+      return days === null ? [] : [[m.id, days] as const];
+    })),
     [upcomingBirthdays]
   );
 
-  const handleCopy = (m: FamilyMember) => {
-    navigator.clipboard.writeText(buildPrompt(m));
-    setCopied(m.id);
-    setTimeout(() => setCopied(null), 2000);
+  const handleGenerate = async (member: FamilyMember) => {
+    if (!snapshot || !todayIds.has(member.id) || generatingId) return;
+    setGeneratingId(member.id);
+    setActionMessage("");
+    try {
+      const wish = await generateBirthdayWish(snapshot.family.id, member.id);
+      await navigator.clipboard.writeText(wish);
+      setActionMessage(`已生成并复制 ${member.name} 的生日祝福`);
+    } catch (cause) {
+      setActionMessage(cause instanceof Error ? cause.message : "生日祝福生成失败");
+    } finally {
+      setGeneratingId(null);
+      window.setTimeout(() => setActionMessage(""), 2500);
+    }
   };
 
   const sourceMembers = useMemo(
@@ -253,6 +265,7 @@ export default function BirthdayPage() {
   const membersByMonth = useMemo(() => {
     const map: Record<number, FamilyMember[]> = {};
     for (const m of searchedMembers) {
+      if (m.birthMonth === null) continue;
       if (!map[m.birthMonth]) map[m.birthMonth] = [];
       map[m.birthMonth].push(m);
     }
@@ -307,13 +320,15 @@ export default function BirthdayPage() {
         </div>
       </div>
 
-      {copied && (
+      {actionMessage && (
         <div className="fixed bottom-24 md:bottom-6 left-1/2 -translate-x-1/2 z-50 bg-[#2d1f1a] text-white text-sm px-5 py-2.5 rounded-full shadow-xl">
-          ✅ 已复制祝福 Prompt
+          {actionMessage}
         </div>
       )}
 
       <div className="max-w-5xl mx-auto px-4 md:px-8 py-5 space-y-5">
+        <MemberManagePanel />
+
         {todayBirthdays.length > 0 && !search && (
           <section>
             <div
@@ -337,7 +352,7 @@ export default function BirthdayPage() {
                     style={{ border: "1.5px solid #fecaca" }}
                   >
                     <button onClick={() => setSelected(m)} className="flex items-center gap-4 flex-1 min-w-0 text-left">
-                      <div className="w-14 h-14 rounded-2xl flex items-center justify-center text-3xl flex-shrink-0" style={{ background: `${fc(m.familyName)}18` }}>
+                      <div className="w-14 h-14 rounded-2xl flex items-center justify-center text-3xl flex-shrink-0" style={{ background: `${memberColor(m)}18` }}>
                         {m.gender === "male" ? "👨" : "👩"}
                       </div>
                       <div className="flex-1 min-w-0">
@@ -352,11 +367,13 @@ export default function BirthdayPage() {
                       </div>
                     </button>
                     <button
-                      onClick={() => handleCopy(m)}
+                      onClick={() => void handleGenerate(m)}
+                      disabled={generatingId !== null}
                       className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all hover:opacity-90"
-                      style={{ background: `linear-gradient(135deg, ${fc(m.familyName)}, ${fc(m.familyName)}cc)`, color: "#fff" }}
+                      style={{ background: `linear-gradient(135deg, ${memberColor(m)}, ${memberColor(m)}cc)`, color: "#fff" }}
                     >
-                      <Copy size={12} /> 复制 Prompt
+                      {generatingId === m.id ? <LoaderCircle size={12} className="animate-spin" /> : <Sparkles size={12} />}
+                      {generatingId === m.id ? "生成中" : "生成祝福"}
                     </button>
                   </div>
                 ))}
@@ -373,7 +390,7 @@ export default function BirthdayPage() {
             {searchedMembers.length > 0 ? (
               <div className="space-y-2">
                 {searchedMembers
-                  .sort((a, b) => a.birthMonth - b.birthMonth || a.birthDay - b.birthDay)
+                  .sort((a, b) => (a.birthMonth ?? 0) - (b.birthMonth ?? 0) || (a.birthDay ?? 0) - (b.birthDay ?? 0))
                   .map((m) => {
                     const isToday = todayIds.has(m.id);
                     const daysLeft = upcomingIds.get(m.id);
@@ -385,7 +402,16 @@ export default function BirthdayPage() {
                         {daysLeft}天后
                       </span>
                     ) : undefined;
-                    return <MemberRow key={m.id} member={m} badge={badge} onSelect={() => setSelected(m)} onCopy={() => handleCopy(m)} />;
+                    return (
+                      <MemberRow
+                        key={m.id}
+                        member={m}
+                        badge={badge}
+                        onSelect={() => setSelected(m)}
+                        onGenerate={isToday ? () => void handleGenerate(m) : undefined}
+                        generating={generatingId === m.id}
+                      />
+                    );
                   })}
               </div>
             ) : (
@@ -412,7 +438,8 @@ export default function BirthdayPage() {
                   todayIds={todayIds}
                   upcomingIds={upcomingIds}
                   onSelect={setSelected}
-                  onCopy={handleCopy}
+                  onGenerate={(member) => void handleGenerate(member)}
+                  generatingId={generatingId}
                 />
               ))}
           </section>

@@ -1,9 +1,4 @@
 import { createBrowserRouter } from "react-router";
-import HomePage from "./pages/HomePage";
-import TreePage from "./pages/TreePage";
-import BirthdayPage from "./pages/BirthdayPage";
-import TimelinePage from "./pages/TimelinePage";
-import ProfilePage from "./pages/ProfilePage";
 import Layout from "./components/Layout";
 
 export const router = createBrowserRouter([
@@ -11,11 +6,11 @@ export const router = createBrowserRouter([
     path: "/",
     Component: Layout,
     children: [
-      { index: true, Component: HomePage },
-      { path: "tree", Component: TreePage },
-      { path: "birthday", Component: BirthdayPage },
-      { path: "timeline", Component: TimelinePage },
-      { path: "profile", Component: ProfilePage },
+      { index: true, lazy: async () => ({ Component: (await import("./pages/HomePage")).default }) },
+      { path: "tree", lazy: async () => ({ Component: (await import("./pages/TreePage")).default }) },
+      { path: "birthday", lazy: async () => ({ Component: (await import("./pages/BirthdayPage")).default }) },
+      { path: "timeline", lazy: async () => ({ Component: (await import("./pages/TimelinePage")).default }) },
+      { path: "profile", lazy: async () => ({ Component: (await import("./pages/ProfilePage")).default }) },
     ],
   },
 ]);

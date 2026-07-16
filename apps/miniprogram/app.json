@@ -6,6 +6,7 @@
     "pages/birthday/index",
     "pages/profile/index",
     "pages/family-manage/index",
+    "pages/invite/index",
     "pages/member-edit/index"
   ],
   "tabBar": {

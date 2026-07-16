@@ -2,14 +2,10 @@ import { useState, useMemo } from "react";
 import { familyMembers } from "../data/familyData";
 import { FamilyMember } from "../types/family";
 import MemberDetailModal from "../components/MemberDetailModal";
+import { useFamily } from "../context/FamilyContext";
 
 // ─── palette ──────────────────────────────────────────────────────────
-const FAMILY_PALETTE: Record<string, string> = {
-  莫家: "#3b82f6", 彭家: "#16a34a", 唐家: "#f97316", 周家: "#9333ea",
-  田家: "#0d9488", 曾家: "#ca8a04", 何家: "#dc2626", 肖家: "#4f46e5",
-  任家: "#db2777", 谢家: "#d97706",
-};
-const fc = (fam: string) => FAMILY_PALETTE[fam] ?? "#a8866c";
+const fc = (member: FamilyMember) => member.gender === "male" ? "#4f7fbf" : member.gender === "female" ? "#d47586" : "#8b817d";
 
 // decade color bands cycling through warm palette
 const DECADE_COLORS = [
@@ -28,6 +24,7 @@ interface TimelineEvent {
 }
 
 export default function TimelinePage() {
+  const { snapshot } = useFamily();
   const [selected, setSelected] = useState<FamilyMember | null>(null);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
 
@@ -114,7 +111,7 @@ export default function TimelinePage() {
             <div className="relative h-2 bg-white/10 rounded-full overflow-hidden">
               {events.map((e) => {
                 const pct = ((e.year - minYear) / (span || 1)) * 100;
-                const c = fc(e.member.familyName);
+                const c = fc(e.member);
                 return (
                   <div
                     key={e.member.id}
@@ -176,8 +173,8 @@ export default function TimelinePage() {
                   {/* event cards */}
                   <div className="ml-14 space-y-3">
                     {evts.map((ev) => {
-                      const c = fc(ev.member.familyName);
-                      const isMe = ev.member.name === "莫发达";
+                      const c = fc(ev.member);
+                      const isMe = ev.member.id === snapshot?.family.linkedMemberId;
                       const isHovered = hoveredId === ev.member.id;
 
                       return (
@@ -300,16 +297,15 @@ export default function TimelinePage() {
       {/* ── family legend ─────────────────────────────────────────────── */}
       <div className="max-w-4xl mx-auto px-4 md:px-8 pb-8">
         <div className="bg-white rounded-3xl p-5 shadow-sm border border-gray-100">
-          <p className="text-xs font-bold text-gray-400 mb-3 uppercase tracking-wider">家族色谱</p>
+          <p className="text-xs font-bold text-gray-400 mb-3 uppercase tracking-wider">成员记录</p>
           <div className="flex flex-wrap gap-3">
-            {Object.entries(FAMILY_PALETTE)
-              .filter(([fam]) => familyMembers.some((m) => m.familyName === fam))
-              .map(([fam, c]) => {
-                const cnt = familyMembers.filter((m) => m.familyName === fam && m.birthYear).length;
+            {[["男性", "male", "#4f7fbf"], ["女性", "female", "#d47586"], ["未设置", "unknown", "#8b817d"]]
+              .map(([label, gender, color]) => {
+                const cnt = familyMembers.filter((m) => m.gender === gender && m.birthYear).length;
                 return (
-                  <div key={fam} className="flex items-center gap-1.5">
-                    <div className="w-3 h-3 rounded-full" style={{ background: c }} />
-                    <span className="text-xs text-gray-600">{fam}</span>
+                  <div key={gender} className="flex items-center gap-1.5">
+                    <div className="w-3 h-3 rounded-full" style={{ background: color }} />
+                    <span className="text-xs text-gray-600">{label}</span>
                     <span className="text-[10px] text-gray-400">{cnt}</span>
                   </div>
                 );
@@ -324,4 +320,3 @@ export default function TimelinePage() {
     </div>
   );
 }
-

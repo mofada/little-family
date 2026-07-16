@@ -7,8 +7,6 @@
       <input class="input" value="{{form.name}}" data-field="name" bindinput="setText" maxlength="30" placeholder="请输入姓名" />
       <text class="label">昵称</text>
       <input class="input" value="{{form.nickName}}" data-field="nickName" bindinput="setText" maxlength="30" placeholder="可不填" />
-      <text class="label">家庭称呼</text>
-      <input class="input" value="{{form.relation}}" data-field="relation" bindinput="setText" maxlength="20" placeholder="例如：爸爸、姐姐" />
       <view class="field"><text class="label">性别</text><picker mode="selector" range="{{genderOptions}}" value="{{genderIndex}}" bindchange="onGenderChange"><view class="picker">{{genderOptions[genderIndex]}} ›</view></picker></view>
     </view>
 
@@ -35,13 +33,90 @@
       <text class="section-title">亲缘关系</text>
       <text class="hint">关系可以以后补充；父母和配偶会自动形成双向图谱。</text>
       <text class="label">父亲</text>
-      <picker mode="selector" range="{{memberOptions}}" range-key="name" value="{{fatherIndex}}" bindchange="onFatherChange"><view class="picker">{{memberOptions[fatherIndex].name}} ›</view></picker>
+      <view class="picker relation-picker" data-field="father" bindtap="openMemberSelector">
+        <view class="relation-value">
+          <text>{{memberOptions[fatherIndex].name}}</text>
+          <text wx:if="{{fatherIndex > 0}}" class="relation-meta">{{memberOptions[fatherIndex].meta}}</text>
+        </view>
+        <text class="picker-arrow">›</text>
+      </view>
       <text class="label">母亲</text>
-      <picker mode="selector" range="{{memberOptions}}" range-key="name" value="{{motherIndex}}" bindchange="onMotherChange"><view class="picker">{{memberOptions[motherIndex].name}} ›</view></picker>
+      <view class="picker relation-picker" data-field="mother" bindtap="openMemberSelector">
+        <view class="relation-value">
+          <text>{{memberOptions[motherIndex].name}}</text>
+          <text wx:if="{{motherIndex > 0}}" class="relation-meta">{{memberOptions[motherIndex].meta}}</text>
+        </view>
+        <text class="picker-arrow">›</text>
+      </view>
       <text class="label">配偶</text>
-      <picker mode="selector" range="{{memberOptions}}" range-key="name" value="{{spouseIndex}}" bindchange="onSpouseChange"><view class="picker">{{memberOptions[spouseIndex].name}} ›</view></picker>
+      <view class="picker relation-picker" data-field="spouse" bindtap="openMemberSelector">
+        <view class="relation-value">
+          <text>{{memberOptions[spouseIndex].name}}</text>
+          <text wx:if="{{spouseIndex > 0}}" class="relation-meta">{{memberOptions[spouseIndex].meta}}</text>
+        </view>
+        <text class="picker-arrow">›</text>
+      </view>
     </view>
 
+    <view class="footer">
+    <button wx:if="{{canDelete}}" class="delete-button" loading="{{saving}}" disabled="{{saving}}" bindtap="deleteCurrentMember">删除成员</button>
     <button class="submit" loading="{{saving}}" disabled="{{saving}}" bindtap="submit">保存成员</button>
+    </view>
   </scroll-view>
+
+  <view wx:if="{{selectorVisible}}" class="selector-mask" bindtap="closeMemberSelector" catchtouchmove="preventBubble">
+    <view class="selector-sheet" catchtap="preventBubble">
+      <view class="selector-handle"></view>
+      <view class="selector-header">
+        <view>
+          <text class="selector-title">{{selectorTitle}}</text>
+          <text class="selector-count">共 {{memberOptions.length - 1}} 位可选成员</text>
+        </view>
+        <view class="selector-close" bindtap="closeMemberSelector">×</view>
+      </view>
+
+      <view class="selector-search">
+        <text class="selector-search-icon">⌕</text>
+        <input
+          class="selector-search-input"
+          value="{{selectorKeyword}}"
+          bindinput="onSelectorSearch"
+          placeholder="搜索姓名、昵称或出生年份"
+          placeholder-class="selector-search-placeholder"
+          confirm-type="search"
+          focus="{{selectorVisible}}"
+        />
+        <view wx:if="{{selectorKeyword}}" class="selector-search-clear" bindtap="clearSelectorSearch">×</view>
+      </view>
+
+      <view class="selector-none" bindtap="clearRelationSelection">
+        <view>
+          <text class="selector-option-name">暂不选择</text>
+          <text class="selector-option-meta">关系可以稍后补充</text>
+        </view>
+        <text wx:if="{{(selectorField === 'father' && fatherIndex === 0) || (selectorField === 'mother' && motherIndex === 0) || (selectorField === 'spouse' && spouseIndex === 0)}}" class="selector-check">✓</text>
+      </view>
+
+      <scroll-view class="selector-list" scroll-y enhanced show-scrollbar="{{false}}">
+        <view wx:if="{{filteredMemberOptions.length === 0}}" class="selector-empty">
+          <text class="selector-empty-title">没有找到匹配的成员</text>
+          <text class="selector-empty-hint">换个姓名、称呼或年份试试</text>
+        </view>
+        <view
+          wx:for="{{filteredMemberOptions}}"
+          wx:key="id"
+          class="selector-option"
+          data-id="{{item.id}}"
+          bindtap="selectMember"
+        >
+          <view class="selector-avatar">{{item.avatar}}</view>
+          <view class="selector-option-body">
+            <text class="selector-option-name">{{item.name}}</text>
+            <text class="selector-option-meta">{{item.meta}}</text>
+          </view>
+          <text wx:if="{{(selectorField === 'father' && memberOptions[fatherIndex].id === item.id) || (selectorField === 'mother' && memberOptions[motherIndex].id === item.id) || (selectorField === 'spouse' && memberOptions[spouseIndex].id === item.id)}}" class="selector-check">✓</text>
+        </view>
+      </scroll-view>
+    </view>
+  </view>
 </view>

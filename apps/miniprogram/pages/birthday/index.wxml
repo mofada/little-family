@@ -2,16 +2,19 @@
   <navigation-bar title="生日管理" back="{{false}}" color="black" background="#f7f3ef" />
 
   <view class="toolbar">
-    <view class="search-box">
-      <view class="search-icon"><view class="search-icon__circle"></view><view class="search-icon__handle"></view></view>
-      <input
-        class="search-input"
-        placeholder="搜索姓名或关系"
-        placeholder-class="search-placeholder"
-        value="{{keyword}}"
-        bindinput="onSearch"
-      />
-      <view wx:if="{{keyword}}" class="search-clear" bindtap="clearSearch">×</view>
+    <view class="toolbar-row">
+      <view class="search-box">
+        <view class="search-icon"><view class="search-icon__circle"></view><view class="search-icon__handle"></view></view>
+        <input
+          class="search-input"
+          placeholder="搜索姓名或关系"
+          placeholder-class="search-placeholder"
+          value="{{keyword}}"
+          bindinput="onSearch"
+        />
+        <view wx:if="{{keyword}}" class="search-clear" bindtap="clearSearch">×</view>
+      </view>
+      <view wx:if="{{canAddMember}}" class="add-member-btn" bindtap="startAddMember" hover-class="action-pressed">添加</view>
     </view>
     <view class="filter-chips">
       <view
@@ -79,6 +82,9 @@
         <view class="prompt-btn" bindtap="generateWish" data-id="{{item.id}}">
           <text>生成祝福</text>
         </view>
+        <view wx:if="{{item.canEdit}}" class="edit-btn" catchtap="editMember" data-json="{{item.memberJson}}" data-can-edit="{{item.canEdit}}">
+          <text>编辑</text>
+        </view>
       </view>
     </view>
 
@@ -106,7 +112,10 @@
           <view wx:if="{{member.isBirthday}}" class="prompt-btn" catchtap="generateWish" data-id="{{member.id}}">
             <text>生成祝福</text>
           </view>
-          <view wx:else class="countdown {{member.isUrgent ? 'countdown--urgent' : ''}}">
+          <view wx:if="{{member.canEdit}}" class="edit-btn" catchtap="editMember" data-json="{{member.memberJson}}" data-can-edit="{{member.canEdit}}">
+            <text>编辑</text>
+          </view>
+          <view wx:if="{{!member.isBirthday}}" class="countdown {{member.isUrgent ? 'countdown--urgent' : ''}}">
             <text>{{member.countdownLabel}}</text>
             <text class="row-arrow">›</text>
           </view>

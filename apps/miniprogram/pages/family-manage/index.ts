@@ -1,6 +1,6 @@
 import {
   acceptInvitation, createFamily, createInvitation, deleteMember,
-  getActiveFamilyId, linkCurrentUser, listFamilies, type FamilySummary,
+  createWebLoginCode, getActiveFamilyId, leaveFamily, linkCurrentUser, listFamilies, type FamilySummary,
 } from '../../services/api'
 import { ensureFamilyData, invalidateFamilyData, switchFamily } from '../../services/familyStore'
 
@@ -26,7 +26,11 @@ Component({
     members: [] as MemberItem[],
     newFamilyName: '',
     inviteCode: '',
+    inviteFamilyId: '',
+    generatingInvite: false,
     joinCode: '',
+    webLoginCode: '',
+    webLoginExpiresAt: '',
   },
   lifetimes: {
     attached() { void this.loadData() },
@@ -57,8 +61,8 @@ Component({
           activeFamilyName: activeFamily?.name ?? '',
           activeRole: role,
           activeRoleLabel: role === 'owner' ? '所有者' : role === 'admin' ? '管理员' : role === 'editor' ? '可编辑' : role === 'viewer' ? '只读' : '',
-          canEdit: role === 'owner' || role === 'admin' || role === 'editor',
-          canInvite: role === 'owner' || role === 'admin',
+          canEdit: role === 'owner',
+          canInvite: role === 'owner',
           linkedMemberId: activeFamily?.linkedMemberId ?? snapshot?.family.linkedMemberId ?? '',
           members,
         })
@@ -104,6 +108,10 @@ Component({
       wx.navigateTo({ url: '/pages/member-edit/index' })
     },
 
+    goBirthday() {
+      wx.switchTab({ url: '/pages/birthday/index' })
+    },
+
     editMember(e: WechatMiniprogram.TouchEvent) {
       wx.setStorageSync('little-family:editing-member', (e.currentTarget.dataset as { json: string }).json)
       wx.navigateTo({ url: '/pages/member-edit/index' })
@@ -140,9 +148,43 @@ Component({
     },
 
     async generateInvite() {
+      if (this.data.generatingInvite) return
+      this.setData({ generatingInvite: true })
       try {
         const result = await createInvitation(this.data.activeFamilyId)
-        this.setData({ inviteCode: result.code })
+        this.setData({
+          inviteCode: result.code,
+          inviteFamilyId: this.data.activeFamilyId,
+        })
+      } catch (error) {
+        wx.showToast({ title: error instanceof Error ? error.message : '生成失败', icon: 'none' })
+      } finally {
+        this.setData({ generatingInvite: false })
+      }
+    },
+
+    onShareAppMessage() {
+      const code = this.data.inviteCode
+      const isCurrentFamilyInvite = code && this.data.inviteFamilyId === this.data.activeFamilyId
+      if (!isCurrentFamilyInvite) {
+        return {
+          title: '小家记 · 记录家人的温暖时光',
+          path: '/pages/home/index',
+        }
+      }
+      return {
+        title: `${this.data.activeFamilyName} 邀请你一起记录家庭时光`,
+        path: `/pages/invite/index?code=${encodeURIComponent(code)}`,
+      }
+    },
+
+    async generateWebLoginCode() {
+      try {
+        const result = await createWebLoginCode()
+        this.setData({
+          webLoginCode: result.code,
+          webLoginExpiresAt: result.expiresAt,
+        })
         wx.setClipboardData({ data: result.code })
       } catch (error) {
         wx.showToast({ title: error instanceof Error ? error.message : '生成失败', icon: 'none' })
@@ -167,6 +209,25 @@ Component({
       } catch (error) {
         wx.showToast({ title: error instanceof Error ? error.message : '加入失败', icon: 'none' })
       }
+    },
+
+    leaveCurrentFamily() {
+      if (!this.data.activeFamilyId || this.data.activeRole === 'owner') return
+      wx.showModal({
+        title: `退出 ${this.data.activeFamilyName}？`,
+        content: '退出后将无法继续查看这个家庭，除非再次通过邀请码加入。',
+        success: async result => {
+          if (!result.confirm) return
+          try {
+            await leaveFamily(this.data.activeFamilyId)
+            invalidateFamilyData()
+            await this.loadData()
+            wx.showToast({ title: '已退出家庭', icon: 'success' })
+          } catch (error) {
+            wx.showToast({ title: error instanceof Error ? error.message : '退出失败', icon: 'none' })
+          }
+        },
+      })
     },
   },
 })

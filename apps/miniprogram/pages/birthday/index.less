@@ -14,7 +14,15 @@
   border-bottom: 1rpx solid #eee8e4;
 }
 
+.toolbar-row {
+  display: flex;
+  align-items: center;
+  gap: 14rpx;
+}
+
 .search-box {
+  flex: 1;
+  min-width: 0;
   height: 76rpx;
   box-sizing: border-box;
   display: flex;
@@ -23,6 +31,22 @@
   background: #f5f1ee;
   border: 1rpx solid #eee7e2;
   border-radius: 22rpx;
+}
+
+.add-member-btn {
+  flex-shrink: 0;
+  height: 72rpx;
+  min-width: 104rpx;
+  box-sizing: border-box;
+  padding: 0 24rpx;
+  border-radius: 22rpx;
+  line-height: 72rpx;
+  text-align: center;
+  font-size: 25rpx;
+  font-weight: 700;
+  color: #fff;
+  background: var(--color-accent);
+  box-shadow: 0 8rpx 18rpx rgba(212, 117, 106, 0.2);
 }
 
 .search-icon {
@@ -207,7 +231,7 @@
   z-index: 1;
   margin: 0;
   padding: 0 18rpx;
-  min-width: 134rpx;
+  width: 134rpx !important;
   line-height: 58rpx;
   border-radius: 999rpx;
   color: #fff;
@@ -255,6 +279,7 @@
   margin-bottom: 0 !important;
   border-bottom: 0 !important;
   border-radius: 18rpx;
+  padding: 0 16rpx !important;
   background: rgba(255, 255, 255, 0.96);
 }
 
@@ -421,6 +446,23 @@
   color: #b7564e;
   background: #fbe8e4;
 }
+
+.edit-btn {
+  height: 50rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-left: 8rpx;
+  padding: 0 15rpx;
+  border-radius: 999rpx;
+  font-size: 20rpx;
+  font-weight: 650;
+  color: #6b7d88;
+  background: #f4f0ed;
+}
+
+.action-pressed { opacity: 0.72; }
 
 .empty-state {
   display: flex;

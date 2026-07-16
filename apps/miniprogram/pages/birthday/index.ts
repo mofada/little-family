@@ -27,6 +27,7 @@ interface MemberRow {
   countdownLabel: string
   calendarLabel: string
   avatarText: string
+  canEdit: boolean
 }
 
 Component({
@@ -36,6 +37,9 @@ Component({
     todayMembers: [] as MemberRow[],
     monthSections: [] as MonthSection[],
     familyId: '',
+    activeRole: '',
+    linkedMemberId: '',
+    canAddMember: false,
     subscriptionConfigured: false,
     activeGrantCount: 0,
     subscriptionMode: 'once' as 'once' | 'long_term',
@@ -58,7 +62,14 @@ Component({
       try {
         const snapshot = await ensureFamilyData()
         const familyId = snapshot?.family.id ?? ''
-        this.setData({ familyId })
+        const activeRole = snapshot?.family.role ?? ''
+        const linkedMemberId = snapshot?.family.linkedMemberId ?? ''
+        this.setData({
+          familyId,
+          activeRole,
+          linkedMemberId,
+          canAddMember: Boolean(familyId),
+        })
         if (familyId) {
           try {
             const subscription = await getBirthdaySubscriptionConfig(familyId)
@@ -103,6 +114,7 @@ Component({
           countdownLabel: daysUntil === 0 ? '就是今天' : daysUntil === 1 ? '明天' : `${daysUntil}天后`,
           calendarLabel: m.birthdayType === 'lunar' ? (m.isLeapMonth ? '农历闰月' : '农历') : '阳历',
           avatarText: m.name.slice(-1),
+          canEdit: activeRole === 'owner' || linkedMemberId === m.id,
         }
       }
 
@@ -161,6 +173,19 @@ Component({
     onMemberTap(e: WechatMiniprogram.TouchEvent) {
       const json = (e.currentTarget.dataset as { json: string }).json
       this.setData({ showModal: true, selectedMemberJson: json })
+    },
+
+    startAddMember() {
+      if (!this.data.canAddMember) return
+      wx.removeStorageSync('little-family:editing-member')
+      wx.navigateTo({ url: '/pages/member-edit/index' })
+    },
+
+    editMember(e: WechatMiniprogram.TouchEvent) {
+      const { json, canEdit } = e.currentTarget.dataset as { json: string; canEdit: boolean | string }
+      if (canEdit !== true && canEdit !== 'true') return
+      wx.setStorageSync('little-family:editing-member', json)
+      wx.navigateTo({ url: '/pages/member-edit/index' })
     },
 
     async generateWish(e: WechatMiniprogram.TouchEvent) {

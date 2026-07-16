@@ -4,10 +4,10 @@ import {
   familyMembers,
   calculateAge,
   getTodayBirthdays,
-  getFamilyBranches,
 } from "../data/familyData";
 import { FamilyMember } from "../types/family";
 import MemberDetailModal from "../components/MemberDetailModal";
+import { useFamily } from "../context/FamilyContext";
 
 // ─── Layout constants ──────────────────────────────────────────────────
 const CW = 88;    // card width
@@ -19,19 +19,8 @@ const PL = 50;    // left padding (space for gen label)
 const PT = 20;    // top padding
 
 // ─── Family color palette ──────────────────────────────────────────────
-const PALETTE: Record<string, string> = {
-  莫家: "#3b82f6",
-  彭家: "#16a34a",
-  唐家: "#f97316",
-  周家: "#9333ea",
-  田家: "#0d9488",
-  曾家: "#ca8a04",
-  何家: "#dc2626",
-  肖家: "#4f46e5",
-  任家: "#db2777",
-  谢家: "#d97706",
-};
-const getColor = (familyName: string) => PALETTE[familyName] ?? "#a8866c";
+const getColor = (member: FamilyMember) =>
+  member.gender === "male" ? "#4f7fbf" : member.gender === "female" ? "#d47586" : "#8b817d";
 
 // ─── Unit type (primary member + optional spouse) ──────────────────────
 interface Unit {
@@ -64,7 +53,7 @@ function buildLayout(members: FamilyMember[]) {
     if (sp) {
       used.add(sp.id);
       // Ensure primary is the one with a parentId (the "tree" member)
-      if (!m.parentId && sp.parentId) {
+      if (m.parentIds.length === 0 && sp.parentIds.length > 0) {
         primary = sp;
         spouse = m;
       }
@@ -87,7 +76,7 @@ function buildLayout(members: FamilyMember[]) {
   }
 
   const parentOf = (u: Unit): Unit | null =>
-    u.primary.parentId ? (uOf.get(u.primary.parentId) ?? null) : null;
+    u.primary.parentIds[0] ? (uOf.get(u.primary.parentIds[0]) ?? null) : null;
 
   // Group by generation
   const genMap = new Map<number, Unit[]>();
@@ -96,7 +85,7 @@ function buildLayout(members: FamilyMember[]) {
     genMap.get(u.gen)!.push(u);
   }
 
-  const maxGen = Math.max(...units.map((u) => u.gen));
+  const maxGen = Math.max(0, ...units.map((u) => u.gen));
 
   // Position each generation row
   for (let gen = 1; gen <= maxGen; gen++) {
@@ -156,6 +145,7 @@ function MCard({
   isBday,
   dim,
   glow,
+  currentMemberId,
   onSelect,
 }: {
   m: FamilyMember;
@@ -164,10 +154,11 @@ function MCard({
   isBday: boolean;
   dim: boolean;
   glow: boolean;
+  currentMemberId: string | null;
   onSelect: (m: FamilyMember) => void;
 }) {
-  const c = getColor(m.familyName);
-  const isMe = m.name === "莫发达";
+  const c = getColor(m);
+  const isMe = m.id === currentMemberId;
   const age = calculateAge(m.birthYear);
   const ageText = age === null ? "-岁" : `${age}岁`;
 
@@ -315,19 +306,20 @@ function MCard({
 const GEN_LABELS = ["一", "二", "三", "四", "五", "六"];
 
 export default function TreePage() {
+  const { snapshot } = useFamily();
   const [selected, setSelected] = useState<FamilyMember | null>(null);
-  const [filter, setFilter] = useState("全部");
+  const [filter, setFilter] = useState(0);
   const [search, setSearch] = useState("");
 
   const todayIds = useMemo(
     () => new Set(getTodayBirthdays().map((m) => m.id)),
     []
   );
-  const branches = useMemo(() => ["全部", ...getFamilyBranches()], []);
+  const generations = useMemo(() => [0, ...new Set(familyMembers.map(member => member.generation))], []);
 
   const filtered = useMemo(() => {
-    if (filter === "全部") return familyMembers;
-    const pri = familyMembers.filter((m) => m.familyName === filter);
+    if (filter === 0) return familyMembers;
+    const pri = familyMembers.filter((m) => m.generation === filter);
     const spIds = new Set(pri.flatMap((m) => (m.spouseId ? [m.spouseId] : [])));
     const sp = familyMembers.filter(
       (m) => spIds.has(m.id) && !pri.includes(m)
@@ -395,19 +387,19 @@ export default function TreePage() {
             style={{ scrollbarWidth: "none" }}
           >
             <Filter className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
-            {branches.map((b) => (
+            {generations.map((generation) => (
               <button
-                key={b}
-                onClick={() => setFilter(b)}
+                key={generation}
+                onClick={() => setFilter(generation)}
                 className="px-3 py-1 rounded-full text-xs whitespace-nowrap transition-all"
                 style={{
                   background:
-                    filter === b ? (PALETTE[b] ?? "#d4756a") : "#f3f4f6",
-                  color: filter === b ? "#fff" : "#374151",
-                  fontWeight: filter === b ? 700 : 400,
+                    filter === generation ? "#d4756a" : "#f3f4f6",
+                  color: filter === generation ? "#fff" : "#374151",
+                  fontWeight: filter === generation ? 700 : 400,
                 }}
               >
-                {b}
+                {generation === 0 ? "全部" : `第${generation}代`}
               </button>
             ))}
           </div>
@@ -526,6 +518,7 @@ export default function TreePage() {
                 isBday={todayIds.has(u.primary.id)}
                 dim={hits !== null && !hits.has(u.primary.id)}
                 glow={hits?.has(u.primary.id) ?? false}
+                currentMemberId={snapshot?.family.linkedMemberId ?? null}
                 onSelect={setSelected}
               />
               {u.spouse && (
@@ -537,6 +530,7 @@ export default function TreePage() {
                     isBday={todayIds.has(u.spouse.id)}
                     dim={hits !== null && !hits.has(u.spouse.id)}
                     glow={hits?.has(u.spouse.id) ?? false}
+                    currentMemberId={snapshot?.family.linkedMemberId ?? null}
                     onSelect={setSelected}
                   />
                   {/* Heart connector between spouses */}
@@ -565,20 +559,18 @@ export default function TreePage() {
       {/* ── Legend bar ────────────────────────────────────────────── */}
       <div className="bg-white/90 border-t border-gray-100 px-4 md:px-8 py-2 flex-shrink-0">
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
-          <span className="text-xs font-semibold text-gray-400">家族色谱</span>
-          {Object.entries(PALETTE)
-            .filter(([fam]) => familyMembers.some((m) => m.familyName === fam))
-            .map(([fam, c]) => (
-              <div key={fam} className="flex items-center gap-1">
+          <span className="text-xs font-semibold text-gray-400">成员标记</span>
+          {[["男性", "#4f7fbf"], ["女性", "#d47586"], ["未设置", "#8b817d"]].map(([label, color]) => (
+              <div key={label} className="flex items-center gap-1">
                 <div
                   style={{
                     width: 9,
                     height: 9,
                     borderRadius: "50%",
-                    background: c,
+                    background: color,
                   }}
                 />
-                <span className="text-xs text-gray-600">{fam}</span>
+                <span className="text-xs text-gray-600">{label}</span>
               </div>
             ))}
           <div className="border-l border-gray-200 pl-3 flex items-center gap-3">

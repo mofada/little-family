@@ -1,0 +1,20 @@
+<view class="page">
+  <navigation-bar title="亲人邀请" back="{{false}}" color="black" background="#f7f3ef" />
+  <view class="content">
+    <view class="invite-card">
+      <view class="family-icon">👨‍👩‍👧‍👦</view>
+      <text class="title">亲人邀请你加入家庭</text>
+      <text class="description">加入后，你可以一起完善家庭成员、亲缘关系和生日记录。</text>
+
+      <view wx:if="{{errorMessage}}" class="error-message">{{errorMessage}}</view>
+      <view
+        wx:if="{{code}}"
+        class="primary-button"
+        bindtap="acceptInvite"
+        hover-class="action-pressed"
+      >{{accepting ? '正在加入…' : '接受邀请并加入'}}</view>
+      <view class="secondary-button" bindtap="goHome" hover-class="action-pressed">暂不加入</view>
+      <text class="hint">邀请一次有效，请确认这是你认识的亲人发送的邀请。</text>
+    </view>
+  </view>
+</view>

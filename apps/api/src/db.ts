@@ -41,6 +41,40 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
 
+  CREATE TABLE IF NOT EXISTS web_login_codes (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    code_hash TEXT NOT NULL UNIQUE,
+    expires_at TEXT NOT NULL,
+    used_at TEXT,
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_web_login_codes_user
+    ON web_login_codes(user_id, created_at);
+
+  CREATE TABLE IF NOT EXISTS wechat_identities (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    provider TEXT NOT NULL CHECK(provider IN ('miniprogram', 'website')),
+    openid TEXT NOT NULL,
+    unionid TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE(provider, openid)
+  );
+  CREATE INDEX IF NOT EXISTS idx_wechat_identities_user
+    ON wechat_identities(user_id);
+  CREATE INDEX IF NOT EXISTS idx_wechat_identities_unionid
+    ON wechat_identities(unionid);
+
+  CREATE TABLE IF NOT EXISTS wechat_web_oauth_states (
+    id TEXT PRIMARY KEY,
+    state_hash TEXT NOT NULL UNIQUE,
+    expires_at TEXT NOT NULL,
+    used_at TEXT,
+    created_at TEXT NOT NULL
+  );
+
   CREATE TABLE IF NOT EXISTS families (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
@@ -145,6 +179,21 @@ db.exec(`
     sent_at TEXT,
     UNIQUE(family_id, user_id, local_date)
   );
+
+  CREATE TABLE IF NOT EXISTS kinship_labels (
+    id TEXT PRIMARY KEY,
+    family_id TEXT NOT NULL REFERENCES families(id) ON DELETE CASCADE,
+    from_member_id TEXT NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+    to_member_id TEXT NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+    label TEXT NOT NULL,
+    source TEXT NOT NULL CHECK(source IN ('deepseek', 'heuristic')),
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    CHECK(from_member_id <> to_member_id),
+    UNIQUE(family_id, from_member_id, to_member_id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_kinship_labels_lookup
+    ON kinship_labels(family_id, from_member_id);
 `)
 
 // v1 removes the presentation-only "family branch" field and allows partial
@@ -207,4 +256,24 @@ if (needsMemberV1Migration) {
 }
 
 db.prepare('INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (2, ?)')
+  .run(new Date().toISOString())
+
+db.prepare('INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (3, ?)')
+  .run(new Date().toISOString())
+
+// Existing users were created through the mini program. Keep that identity
+// explicit so a website OpenID can later be linked through the shared UnionID.
+db.exec(`
+  INSERT OR IGNORE INTO wechat_identities (
+    id, user_id, provider, openid, unionid, created_at, updated_at
+  )
+  SELECT lower(hex(randomblob(16))), id, 'miniprogram', openid, unionid, created_at, updated_at
+  FROM users
+  WHERE openid NOT LIKE 'website:%';
+`)
+
+db.prepare('INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (4, ?)')
+  .run(new Date().toISOString())
+
+db.prepare('INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (5, ?)')
   .run(new Date().toISOString())
