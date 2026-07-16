@@ -52,6 +52,12 @@ npm run build:web
 
 构建产物位于 `apps/web/dist/`。生产环境要把 SPA 的未知路径回退到 `index.html`，并将 `/api/*`、`/health` 反向代理到 API。
 
+部署静态产物可使用 `rsync` 同步到服务器 Web 根目录：
+
+```bash
+rsync -av --delete apps/web/dist/ /var/www/family/
+```
+
 ## 生日祝福
 
 Web 与小程序保持一致：只有成员生日当天才显示祝福生成按钮。点击后由 `apps/api` 调用 DeepSeek，生成结果会自动复制到剪贴板；浏览器端不保存或调用 DeepSeek API Key。服务端需配置 `DEEPSEEK_API_KEY`，可用 `DEEPSEEK_MODEL` 指定模型。
