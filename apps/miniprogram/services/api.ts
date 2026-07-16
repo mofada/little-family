@@ -54,6 +54,7 @@ const request = <T>(
   method: 'GET' | 'POST' | 'PATCH' | 'DELETE' = 'GET',
   data?: unknown,
   authenticated = true,
+  timeout?: number,
 ): Promise<T> => new Promise((resolve, reject) => {
   const token = wx.getStorageSync(TOKEN_KEY) as string
   wx.request({
@@ -61,6 +62,7 @@ const request = <T>(
     // 项目内置的旧版微信类型尚未列出 PATCH，但运行时基础库支持该方法。
     method: method as never,
     data: data as WechatMiniprogram.IAnyObject | undefined,
+    timeout,
     header: authenticated && token ? { Authorization: `Bearer ${token}` } : {},
     success: response => {
       if (response.statusCode >= 200 && response.statusCode < 300) {
@@ -71,7 +73,10 @@ const request = <T>(
       const body = response.data as ApiErrorBody
       reject(new Error(body.error?.message ?? `请求失败（${response.statusCode}）`))
     },
-    fail: error => reject(new Error(error.errMsg || '无法连接服务器')),
+    fail: error => {
+      const message = error.errMsg?.includes('timeout') ? '请求超时，请稍后再试' : error.errMsg || '无法连接服务器'
+      reject(new Error(message))
+    },
   })
 })
 
@@ -120,7 +125,7 @@ export const fetchSnapshot = async (familyId: string): Promise<FamilySnapshot> =
 
 export const refreshKinshipLabels = async (familyId: string): Promise<FamilySnapshot> => {
   await ensureAuth()
-  return request<FamilySnapshot>(`/api/families/${familyId}/kinship-labels/refresh`, 'POST')
+  return request<FamilySnapshot>(`/api/families/${familyId}/kinship-labels/refresh`, 'POST', undefined, true, 180_000)
 }
 
 export const saveMember = async (

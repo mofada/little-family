@@ -32,12 +32,12 @@ const logDeepSeekDiagnostic = (event: string, detail: Record<string, unknown>): 
   }))
 }
 
-const logDeepSeekPayload = (
-  event: string,
-  payload: Record<string, unknown>,
-): void => {
-  if (process.env.DEBUG_DEEPSEEK_PAYLOAD !== 'true') return
-  console.info('[deepseek-payload]', JSON.stringify({ event, ...payload }))
+const logDeepSeekInfo = (event: string, detail: Record<string, unknown>): void => {
+  console.info('[deepseek]', JSON.stringify({
+    event,
+    model: config.deepseekModel,
+    ...detail,
+  }))
 }
 
 const summarizeDeepSeekResponse = (responseText: string): Record<string, unknown> => {
@@ -82,6 +82,7 @@ const callDeepSeek = async (
         ],
         max_tokens: maxTokens,
         stream: false,
+        thinking: { type: 'disabled' },
         ...(jsonResponse ? { response_format: { type: 'json_object' } } : {}),
       }),
       signal: AbortSignal.timeout(timeoutMs),
@@ -214,7 +215,15 @@ const kinshipSystemPrompt = [
 ].join('\n')
 
 const kinshipMaxTokens = (targetCount: number): number =>
-  Math.min(12_000, Math.max(6000, targetCount * 240))
+  Math.min(4000, Math.max(1200, targetCount * 100))
+
+const kinshipRequestSummary = (input: KinshipLabelRequest): Record<string, unknown> => ({
+  viewerGender: input.viewer.gender,
+  viewerBirthYear: input.viewer.birthYear,
+  targetCount: input.targets.length,
+  missingPathCount: input.targets.filter(target => !target.pathText).length,
+  maxPathLength: input.targets.reduce((max, target) => Math.max(max, target.pathText?.length ?? 0), 0),
+})
 
 const kinshipBatches = (
   input: KinshipLabelRequest,
@@ -268,33 +277,13 @@ export const generateKinshipLabels = async (
   const batches = kinshipBatches(input)
   for (const [batchIndex, batch] of batches.entries()) {
     const maxTokens = kinshipMaxTokens(batch.targets.length)
-    logDeepSeekDiagnostic('kinship_batch_request', {
-      code: 'KINSHIP_LABEL_GENERATION_FAILED',
+    const startedAt = Date.now()
+    logDeepSeekInfo('kinship_batch_request', {
       batchIndex: batchIndex + 1,
       batchCount: batches.length,
-      viewerGender: batch.viewer.gender,
-      viewerBirthYear: batch.viewer.birthYear,
-      targetCount: batch.targets.length,
+      ...kinshipRequestSummary(batch),
       maxTokens,
       timeoutMs: KINSHIP_LABEL_TIMEOUT_MS,
-    })
-    logDeepSeekPayload('kinship_batch_request_payload', {
-      batchIndex: batchIndex + 1,
-      batchCount: batches.length,
-      messages: [
-        { role: 'system', content: kinshipSystemPrompt },
-        { role: 'user', content: JSON.stringify(batch) },
-      ],
-      request: {
-        viewer: batch.viewer,
-        targets: batch.targets,
-      },
-      deepseekOptions: {
-        model: config.deepseekModel,
-        maxTokens,
-        timeoutMs: KINSHIP_LABEL_TIMEOUT_MS,
-        responseFormat: { type: 'json_object' },
-      },
     })
     try {
       const content = await callDeepSeek(
@@ -307,33 +296,19 @@ export const generateKinshipLabels = async (
         true,
       )
       const parsed = parseJsonObject(content)
-      let batchLabelCount = 0
-      const batchLabels: Record<string, string> = {}
       batch.targets.forEach(target => {
         const value = parsed[target.id]
         if (typeof value !== 'string') return
         const label = value.trim().replace(/[，。,.；;：:\s]/g, '').slice(0, 20)
         if (!label) return
         labels.set(target.id, label)
-        batchLabels[target.id] = label
-        batchLabelCount += 1
       })
-      logDeepSeekPayload('kinship_batch_response_labels', {
-        batchIndex: batchIndex + 1,
-        batchCount: batches.length,
-        viewer: batch.viewer,
-        labels: batch.targets.map(target => ({
-          id: target.id,
-          label: batchLabels[target.id] ?? null,
-        })),
-        rawResponse: parsed,
-      })
-      logDeepSeekDiagnostic('kinship_batch_success', {
-        code: 'KINSHIP_LABEL_GENERATION_FAILED',
+      logDeepSeekInfo('kinship_batch_success', {
         batchIndex: batchIndex + 1,
         batchCount: batches.length,
         targetCount: batch.targets.length,
-        labelCount: batchLabelCount,
+        labelCount: batch.targets.filter(target => labels.has(target.id)).length,
+        durationMs: Date.now() - startedAt,
       })
     } catch (error) {
       logDeepSeekDiagnostic('kinship_batch_failed', {
@@ -341,6 +316,8 @@ export const generateKinshipLabels = async (
         batchIndex: batchIndex + 1,
         batchCount: batches.length,
         targetCount: batch.targets.length,
+        requestSummary: kinshipRequestSummary(batch),
+        durationMs: Date.now() - startedAt,
         error: describeError(error),
       })
     }
@@ -349,7 +326,7 @@ export const generateKinshipLabels = async (
   if (labels.size === 0) {
     logDeepSeekDiagnostic('kinship_no_valid_labels', {
       code: 'KINSHIP_LABEL_GENERATION_FAILED',
-      targetCount: input.targets.length,
+      requestSummary: kinshipRequestSummary(input),
     })
     throw new AppError(502, '称呼生成失败', 'KINSHIP_LABEL_GENERATION_FAILED')
   }

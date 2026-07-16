@@ -60,6 +60,11 @@ const audit = (
   `).run(randomUUID(), familyId, userId, action, entityType, entityId, JSON.stringify(detail), now())
 }
 
+const logKinship = (event: string, detail: Record<string, unknown>, level: 'info' | 'error' = 'info'): void => {
+  const logger = level === 'error' ? console.error : console.info
+  logger('[kinship]', JSON.stringify({ event, ...detail }))
+}
+
 interface MemberRow {
   id: string
   name: string
@@ -294,13 +299,6 @@ const refreshKinshipLabels = async (
   if (targetMembers.length > 0) {
     const viewer = members.find(member => member.id === viewerMemberId)!
     const kinshipPaths = buildKinshipPaths(viewerMemberId, members, relationships)
-    console.info('[kinship]', JSON.stringify({
-      event: 'refresh_paths_built',
-      viewerIdSuffix: viewer.id.slice(-8),
-      viewerName: viewer.name,
-      targetCount: targetMembers.length,
-      unresolvedTargetCount: targetMembers.filter(member => !kinshipPaths.get(member.id)).length,
-    }))
     generatedLabels = await generateKinshipLabels({
       viewer: {
         gender: viewer.gender,
@@ -644,6 +642,7 @@ app.post('/api/families/:familyId/kinship-labels/refresh', async (request: Reque
   const { authUser } = request as AuthenticatedRequest
   const familyId = routeParam(request, 'familyId')
   const role = requireFamilyRole(authUser.id, familyId, 'viewer')
+  const startedAt = Date.now()
   const family = db.prepare(`
     SELECT families.id, families.name, families.description,
            family_users.linked_member_id AS linkedMemberId,
@@ -661,8 +660,7 @@ app.post('/api/families/:familyId/kinship-labels/refresh', async (request: Reque
     SELECT id, from_member_id, to_member_id, type
     FROM relationships WHERE family_id = ?
   `).all(familyId) as unknown as RelationshipRow[]
-  console.info('[kinship]', JSON.stringify({
-    event: 'refresh_requested',
+  logKinship('refresh_requested', {
     familyIdSuffix: familyId.slice(-8),
     authUserIdSuffix: authUser.id.slice(-8),
     linkedMemberIdSuffix: linkedMemberId?.slice(-8) ?? null,
@@ -670,9 +668,25 @@ app.post('/api/families/:familyId/kinship-labels/refresh', async (request: Reque
     memberCount: members.length,
     targetCount: linkedMemberId ? Math.max(0, members.length - 1) : 0,
     relationshipCount: relationships.length,
-  }))
-  await refreshKinshipLabels(familyId, linkedMemberId, members, relationships)
-  response.json({ family: { ...family as object, role }, ...await getSnapshot(familyId, linkedMemberId) })
+  })
+  try {
+    await refreshKinshipLabels(familyId, linkedMemberId, members, relationships)
+    const snapshot = await getSnapshot(familyId, linkedMemberId)
+    logKinship('refresh_succeeded', {
+      familyIdSuffix: familyId.slice(-8),
+      authUserIdSuffix: authUser.id.slice(-8),
+      durationMs: Date.now() - startedAt,
+    })
+    response.json({ family: { ...family as object, role }, ...snapshot })
+  } catch (error) {
+    logKinship('refresh_failed', {
+      familyIdSuffix: familyId.slice(-8),
+      authUserIdSuffix: authUser.id.slice(-8),
+      durationMs: Date.now() - startedAt,
+      error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+    }, 'error')
+    throw error
+  }
 })
 
 app.patch('/api/families/:familyId/me', (request: Request, response) => {
