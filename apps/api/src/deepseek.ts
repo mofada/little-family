@@ -24,6 +24,16 @@ const describeError = (error: unknown): string => {
   return String(error)
 }
 
+const normalizeKinshipLabel = (label: string): string => {
+  const compact = label.trim().replace(/[，。,.；;：:\s]/g, '')
+  if (!compact) return ''
+  return compact
+    .replace(/连襟/g, '姐夫')
+    .replace(/妯娌/g, '嫂子')
+    .replace(/^姻亲$/, '亲人')
+    .slice(0, 20)
+}
+
 const logDeepSeekDiagnostic = (event: string, detail: Record<string, unknown>): void => {
   console.error('[deepseek]', JSON.stringify({
     event,
@@ -208,9 +218,9 @@ const kinshipSystemPrompt = [
   '不要输出“姐夫/妹夫”“哥哥/弟弟”这类带斜杠的不确定称呼，除非确实缺少出生年份。',
   '配偶的亲兄弟姐妹直接按配偶视角称呼为哥哥、弟弟、姐姐、妹妹，不要加“妻子的”或“丈夫的”前缀。',
   '配偶的兄弟姐妹的配偶也按家庭日常称呼为姐夫、妹夫、嫂子、弟妹，不要加“妻子的”或“丈夫的”前缀。',
-  '不要输出“姻亲”"连襟""妯娌"这种泛称；能按具体亲戚关系称呼时必须输出具体称呼。',
-  // '母亲的母亲的儿子的妻子称为舅妈；母亲的母亲的女儿的丈夫称为姨父。',
-  // '父亲的父亲的妻子称为奶奶；母亲的母亲的丈夫称为外公。',
+  '绝对不要输出“连襟”“妯娌”“姻亲”“内兄”“内弟”“襟兄”这类生僻或泛称；男性优先用姐夫、妹夫、哥哥、弟弟，女性优先用嫂子、弟妹、姐姐、妹妹。',
+  '如果关系是妻子的姐妹的丈夫，应称姐夫或妹夫，不要称连襟。',
+  '如果关系是丈夫的兄弟的妻子，应称嫂子或弟妹，不要称妯娌。',
   '不要输出解释、Markdown 或代码块。',
 ].join('\n')
 
@@ -299,7 +309,7 @@ export const generateKinshipLabels = async (
       batch.targets.forEach(target => {
         const value = parsed[target.id]
         if (typeof value !== 'string') return
-        const label = value.trim().replace(/[，。,.；;：:\s]/g, '').slice(0, 20)
+        const label = normalizeKinshipLabel(value)
         if (!label) return
         labels.set(target.id, label)
       })

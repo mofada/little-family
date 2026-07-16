@@ -122,7 +122,17 @@ interface KinshipLabelRow {
   label: string
 }
 
-const sanitizeKinshipLabel = (label: string): string => label.trim().replace(/[，。,.；;：:\s]/g, '').slice(0, 20)
+const normalizeKinshipLabel = (label: string): string => {
+  const compact = label.trim().replace(/[，。,.；;：:\s]/g, '')
+  if (!compact) return ''
+  return compact
+    .replace(/连襟/g, '姐夫')
+    .replace(/妯娌/g, '嫂子')
+    .replace(/^姻亲$/, '亲人')
+    .slice(0, 20)
+}
+
+const sanitizeKinshipLabel = (label: string): string => normalizeKinshipLabel(label)
 
 const genderedParentRelation = (member: MemberRow): string => {
   if (member.gender === 'male') return '爸爸'
