@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import {
   AlertCircle, Cake, Check, ChevronRight, GitBranch, Heart, Link2, LogOut, Pencil, Plus, Save, Search,
   ShieldCheck, Trash2, UserRoundCheck, Users, X,
@@ -61,6 +61,18 @@ function describeRelation(path: FamilyMember[]): string {
 }
 
 const GEN_LABELS = ["一", "二", "三", "四", "五"];
+const MONTH_NAMES = [
+  "一月", "二月", "三月", "四月", "五月", "六月",
+  "七月", "八月", "九月", "十月", "十一月", "十二月",
+];
+const MONTH_BG = [
+  "#fce7f3", "#fee2e2", "#ffedd5", "#fef9c3", "#d1fae5", "#cffafe",
+  "#e0f2fe", "#ede9fe", "#fce7f3", "#fef3c7", "#f0fdf4", "#e0e7ff",
+];
+const MONTH_ACCENT = [
+  "#db2777", "#dc2626", "#ea580c", "#ca8a04", "#059669", "#0891b2",
+  "#0284c7", "#7c3aed", "#db2777", "#d97706", "#16a34a", "#4f46e5",
+];
 
 const emptyMemberForm = (): MemberInput => ({
   name: "",
@@ -76,12 +88,42 @@ const emptyMemberForm = (): MemberInput => ({
   spouseId: null,
 });
 
-export function MemberManagePanel() {
+interface MemberManagePanelProps {
+  title?: string;
+  subtitle?: string;
+  members?: FamilyMember[];
+  query?: string;
+  onQueryChange?: (value: string) => void;
+  showStats?: boolean;
+  showSearch?: boolean;
+  groupByBirthdayMonth?: boolean;
+  currentMonth?: number;
+  emptyText?: string;
+  rowBadge?: (member: FamilyMember) => ReactNode;
+  rowExtraAction?: (member: FamilyMember) => ReactNode;
+  onMemberSelect?: (member: FamilyMember) => void;
+}
+
+export function MemberManagePanel({
+  title = "成员管理",
+  subtitle,
+  members = familyMembers,
+  query,
+  onQueryChange,
+  showStats = true,
+  showSearch = true,
+  groupByBirthdayMonth = false,
+  currentMonth = new Date().getMonth() + 1,
+  emptyText = "没有找到匹配的成员",
+  rowBadge,
+  rowExtraAction,
+  onMemberSelect,
+}: MemberManagePanelProps = {}) {
   const { snapshot, saveFamilyMember, deleteFamilyMember, setLinkedMember } = useFamily();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<MemberInput>(emptyMemberForm);
   const [formOpen, setFormOpen] = useState(false);
-  const [query, setQuery] = useState("");
+  const [localQuery, setLocalQuery] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const isOwner = snapshot?.family.role === "owner";
@@ -225,7 +267,9 @@ export function MemberManagePanel() {
     next[index] = id;
     setField("parentIds", next.filter(Boolean));
   };
-  const membersWithMeta = familyMembers
+  const activeQuery = query ?? localQuery;
+  const setActiveQuery = onQueryChange ?? setLocalQuery;
+  const membersWithMeta = members
     .map((member) => ({
       member,
       parents: member.parentIds.map((id) => memberById.get(id)).filter((item): item is FamilyMember => Boolean(item)),
@@ -239,7 +283,7 @@ export function MemberManagePanel() {
       .filter(Boolean)
       .join(" ")
       .toLowerCase();
-    return text.includes(query.trim().toLowerCase());
+    return text.includes(activeQuery.trim().toLowerCase());
   });
   const birthdayCount = familyMembers.filter((member) => member.birthdayType && member.birthMonth !== null && member.birthDay !== null).length;
   const relationCount = familyMembers.filter((member) => member.parentIds.length > 0 || member.spouseId).length;
@@ -247,10 +291,67 @@ export function MemberManagePanel() {
   const inputClass = "w-full rounded-2xl bg-[#f7f3ef] border border-[#eadfd8] px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#6b9d8a]/20";
   const labelClass = "text-xs font-bold text-gray-400 mb-1.5 block";
 
+  const renderMemberRow = ({ member, parents, spouse, hasBirthday, isLinked }: typeof filteredMembers[number]) => (
+    <div key={member.id} className="flex flex-wrap md:flex-nowrap items-center gap-2 md:gap-3 px-4 py-3 border-b border-gray-100 last:border-b-0">
+      <button
+        type="button"
+        onClick={() => onMemberSelect?.(member)}
+        className="flex items-center gap-3 flex-1 min-w-[150px] text-left disabled:cursor-default"
+        disabled={!onMemberSelect}
+      >
+        <div className="w-10 h-10 rounded-full flex items-center justify-center text-lg bg-[#f7f3ef] flex-shrink-0">{member.gender === "male" ? "👨" : member.gender === "female" ? "👩" : "👤"}</div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 min-w-0">
+            <p className="font-bold text-sm text-[#2d1f1a] truncate">{member.name}</p>
+            {member.nickName && <span className="text-xs text-gray-400 truncate">「{member.nickName}」</span>}
+            {isLinked && <span className="px-2 py-0.5 rounded-full bg-[#6b9d8a]/10 text-[#3b7d6a] text-[10px] font-bold flex-shrink-0">我</span>}
+          </div>
+          <p className="text-xs text-gray-400 truncate">
+            {member.relation || "未设置称呼"} · {hasBirthday ? `${member.birthdayType === "lunar" ? "农历" : "阳历"}${member.birthMonth}月${member.birthDay}日` : "生日未录"}
+          </p>
+          {(parents.length > 0 || spouse) && (
+            <p className="text-[11px] text-gray-400 truncate mt-0.5">
+              {parents.length > 0 ? `父母：${parents.map((parent) => parent.name).join("、")}` : ""}
+              {parents.length > 0 && spouse ? " · " : ""}
+              {spouse ? `配偶：${spouse.name}` : ""}
+            </p>
+          )}
+        </div>
+      </button>
+      {rowBadge?.(member)}
+      {rowExtraAction?.(member)}
+      <button onClick={() => void linkMember(member.id)} disabled={busy} className={`rounded-xl px-3 py-2 text-xs font-bold flex items-center gap-1 disabled:opacity-50 ${isLinked ? "bg-[#6b9d8a] text-white" : "bg-[#f7f3ef] text-[#8a6b5d]"}`}>
+        {isLinked ? <Check size={13} /> : <UserRoundCheck size={13} />}{isLinked ? "本人" : "关联"}
+      </button>
+      {(isOwner || isLinked) && (
+        <button onClick={() => startEdit(member)} className="rounded-xl bg-[#f7f3ef] p-2 text-[#6b7d88]" title="编辑"><Pencil size={15} /></button>
+      )}
+      {isOwner && (
+        <button onClick={() => void remove(member)} className="rounded-xl bg-[#fff1f1] p-2 text-[#b91c1c]" title="删除"><Trash2 size={15} /></button>
+      )}
+    </div>
+  );
+
+  const groupedMembers = groupByBirthdayMonth
+    ? filteredMembers.reduce<Record<number, typeof filteredMembers>>((map, item) => {
+      const month = item.member.birthMonth ?? 0;
+      if (!month) return map;
+      if (!map[month]) map[month] = [];
+      map[month].push(item);
+      return map;
+    }, {})
+    : {};
+
   return (
     <section>
       <div className="flex items-center justify-between gap-3 mb-3">
-        <div className="flex items-center gap-2"><Users size={18} className="text-[#6b9d8a]" /><h2 className="font-black text-[#2d1f1a]">成员管理</h2></div>
+        <div className="flex items-center gap-2">
+          <Users size={18} className="text-[#6b9d8a]" />
+          <div>
+            <h2 className="font-black text-[#2d1f1a]">{title}</h2>
+            {subtitle && <p className="text-xs text-gray-400 mt-0.5">{subtitle}</p>}
+          </div>
+        </div>
         {canAdd && (
           <button onClick={openCreate} className="rounded-xl bg-[#d4756a] text-white px-3 py-2 text-xs font-bold flex items-center gap-1">
             <Plus size={14} />新增
@@ -258,7 +359,7 @@ export function MemberManagePanel() {
         )}
       </div>
 
-      <div className="grid grid-cols-3 gap-2 mb-3">
+      {showStats && <div className="grid grid-cols-3 gap-2 mb-3">
         {[
           { label: "成员", value: familyMembers.length, icon: Users, color: "#3b82f6" },
           { label: "生日", value: birthdayCount, icon: Cake, color: "#d4756a" },
@@ -270,50 +371,47 @@ export function MemberManagePanel() {
             <p className="text-xs text-gray-400">{item.label}</p>
           </div>
         ))}
-      </div>
+      </div>}
 
-      <div className="bg-white rounded-3xl border border-gray-100 shadow-sm p-3 mb-3">
+      {showSearch && <div className="bg-white rounded-3xl border border-gray-100 shadow-sm p-3 mb-3">
         <div className="relative">
           <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索姓名、称呼或关系" className="w-full rounded-2xl bg-[#f7f3ef] border border-[#eadfd8] pl-9 pr-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#6b9d8a]/20" />
+          <input value={activeQuery} onChange={(event) => setActiveQuery(event.target.value)} placeholder="搜索姓名、称呼或关系" className="w-full rounded-2xl bg-[#f7f3ef] border border-[#eadfd8] pl-9 pr-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#6b9d8a]/20" />
         </div>
-      </div>
+      </div>}
 
-      <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
-        {filteredMembers.map(({ member, parents, spouse, hasBirthday, isLinked }) => (
-          <div key={member.id} className="flex items-center gap-3 px-4 py-3 border-b border-gray-100 last:border-b-0">
-            <div className="w-10 h-10 rounded-full flex items-center justify-center text-lg bg-[#f7f3ef]">{member.gender === "male" ? "👨" : member.gender === "female" ? "👩" : "👤"}</div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 min-w-0">
-                <p className="font-bold text-sm text-[#2d1f1a] truncate">{member.name}</p>
-                {isLinked && <span className="px-2 py-0.5 rounded-full bg-[#6b9d8a]/10 text-[#3b7d6a] text-[10px] font-bold flex-shrink-0">我</span>}
-              </div>
-              <p className="text-xs text-gray-400 truncate">
-                {member.relation || "未设置称呼"} · {hasBirthday ? `${member.birthdayType === "lunar" ? "农历" : "阳历"}${member.birthMonth}月${member.birthDay}日` : "生日未录"}
-              </p>
-              {(parents.length > 0 || spouse) && (
-                <p className="text-[11px] text-gray-400 truncate mt-0.5">
-                  {parents.length > 0 ? `父母：${parents.map((parent) => parent.name).join("、")}` : ""}
-                  {parents.length > 0 && spouse ? " · " : ""}
-                  {spouse ? `配偶：${spouse.name}` : ""}
-                </p>
-              )}
-            </div>
-            <button onClick={() => void linkMember(member.id)} disabled={busy} className={`rounded-xl px-3 py-2 text-xs font-bold flex items-center gap-1 disabled:opacity-50 ${isLinked ? "bg-[#6b9d8a] text-white" : "bg-[#f7f3ef] text-[#8a6b5d]"}`}>
-              {isLinked ? <Check size={13} /> : <UserRoundCheck size={13} />}{isLinked ? "本人" : "关联"}
-            </button>
-            {(isOwner || isLinked) && (
-              <button onClick={() => startEdit(member)} className="rounded-xl bg-[#f7f3ef] p-2 text-[#6b7d88]" title="编辑"><Pencil size={15} /></button>
-            )}
-            {isOwner && (
-              <>
-                <button onClick={() => void remove(member)} className="rounded-xl bg-[#fff1f1] p-2 text-[#b91c1c]" title="删除"><Trash2 size={15} /></button>
-              </>
-            )}
-          </div>
-        ))}
-        {filteredMembers.length === 0 && <p className="px-4 py-8 text-center text-sm text-gray-400">没有找到匹配的成员</p>}
-      </div>
+      {groupByBirthdayMonth ? (
+        <div className="space-y-4">
+          {Object.keys(groupedMembers)
+            .map(Number)
+            .sort((a, b) => ((a - currentMonth + 12) % 12) - ((b - currentMonth + 12) % 12))
+            .map((month) => {
+              const rows = groupedMembers[month].sort((a, b) => (a.member.birthDay ?? 0) - (b.member.birthDay ?? 0));
+              return (
+                <div key={month} className="rounded-3xl overflow-hidden border border-gray-100 shadow-sm" style={{ background: MONTH_BG[(month - 1) % 12] }}>
+                  <div className="flex items-center justify-between px-5 py-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-2xl flex items-center justify-center text-white text-sm font-black" style={{ background: MONTH_ACCENT[(month - 1) % 12] }}>{month}</div>
+                      <div>
+                        <p className="font-black text-sm" style={{ color: MONTH_ACCENT[(month - 1) % 12] }}>{MONTH_NAMES[month - 1]}</p>
+                        <p className="text-xs text-gray-500">{rows.length} 位成员</p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mx-3 mb-3 bg-white rounded-2xl overflow-hidden">
+                    {rows.map(renderMemberRow)}
+                  </div>
+                </div>
+              );
+            })}
+          {filteredMembers.length === 0 && <p className="px-4 py-8 text-center text-sm text-gray-400">{emptyText}</p>}
+        </div>
+      ) : (
+        <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
+          {filteredMembers.map(renderMemberRow)}
+          {filteredMembers.length === 0 && <p className="px-4 py-8 text-center text-sm text-gray-400">{emptyText}</p>}
+        </div>
+      )}
       {message && (
         <div className="mt-3 rounded-2xl bg-white border border-[#eadfd8] px-4 py-3 text-xs text-[#8a5f5a] flex items-center gap-2">
           <AlertCircle size={14} className="flex-shrink-0" />{message}
@@ -371,11 +469,11 @@ export function MemberManagePanel() {
               <div>
                 <div className="flex items-center gap-2 mb-3"><GitBranch size={16} className="text-[#a8866c]" /><p className="text-sm font-black text-[#2d1f1a]">亲缘关系</p></div>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  <div><label className={labelClass}>父母 1</label><select value={parentOne} onChange={(event) => setParent(0, event.target.value)} className={inputClass}>
+                  <div><label className={labelClass}>父亲</label><select value={parentOne} onChange={(event) => setParent(0, event.target.value)} className={inputClass}>
                     <option value="">未设置</option>
                     {relationOptions.map((member) => <option key={member.id} value={member.id}>{member.name}（{member.relation || "成员"}）</option>)}
                   </select></div>
-                  <div><label className={labelClass}>父母 2</label><select value={parentTwo} onChange={(event) => setParent(1, event.target.value)} className={inputClass}>
+                  <div><label className={labelClass}>母亲</label><select value={parentTwo} onChange={(event) => setParent(1, event.target.value)} className={inputClass}>
                     <option value="">未设置</option>
                     {relationOptions.map((member) => <option key={member.id} value={member.id}>{member.name}（{member.relation || "成员"}）</option>)}
                   </select></div>
