@@ -1,15 +1,9 @@
 import {
-  acceptInvitation, createFamily, createInvitation, deleteMember,
-  createWebLoginCode, getActiveFamilyId, leaveFamily, linkCurrentUser, listFamilies, type FamilySummary,
+  acceptInvitation, createFamily, createInvitation, createWebLoginCode,
+  decideMemberLinkRequest, getActiveFamilyId, leaveFamily, listFamilies,
+  listMemberLinkRequests, type FamilySummary, type MemberLinkRequest,
 } from '../../services/api'
-import { ensureFamilyData, invalidateFamilyData, switchFamily } from '../../services/familyStore'
-
-interface MemberItem {
-  id: string
-  name: string
-  relation: string
-  memberJson: string
-}
+import { invalidateFamilyData, switchFamily } from '../../services/familyStore'
 
 Component({
   data: {
@@ -22,8 +16,9 @@ Component({
     activeRoleLabel: '',
     canEdit: false,
     canInvite: false,
+    canApproveLink: false,
     linkedMemberId: '',
-    members: [] as MemberItem[],
+    linkRequests: [] as MemberLinkRequest[],
     newFamilyName: '',
     inviteCode: '',
     inviteFamilyId: '',
@@ -45,14 +40,11 @@ Component({
         const activeId = getActiveFamilyId()
         const familyIndex = families.findIndex(item => item.id === activeId)
         const activeFamily = families[familyIndex]
-        const snapshot = activeFamily ? await ensureFamilyData(true) : null
-        const members = (snapshot?.members ?? []).map(member => ({
-          id: member.id,
-          name: member.name,
-          relation: member.relation,
-          memberJson: JSON.stringify(member),
-        }))
         const role = activeFamily?.role ?? ''
+        const canApproveLink = role === 'owner' || role === 'admin'
+        const linkRequests = activeFamily && canApproveLink
+          ? await listMemberLinkRequests(activeFamily.id)
+          : []
         this.setData({
           loading: false,
           families,
@@ -63,8 +55,9 @@ Component({
           activeRoleLabel: role === 'owner' ? '所有者' : role === 'admin' ? '管理员' : role === 'editor' ? '可编辑' : role === 'viewer' ? '只读' : '',
           canEdit: role === 'owner',
           canInvite: role === 'owner',
-          linkedMemberId: activeFamily?.linkedMemberId ?? snapshot?.family.linkedMemberId ?? '',
-          members,
+          canApproveLink,
+          linkedMemberId: activeFamily?.linkedMemberId ?? '',
+          linkRequests,
         })
       } catch (error) {
         this.setData({ loading: false })
@@ -103,48 +96,16 @@ Component({
       }
     },
 
-    startAdd() {
-      wx.removeStorageSync('little-family:editing-member')
-      wx.navigateTo({ url: '/pages/member-edit/index' })
-    },
-
-    goBirthday() {
-      wx.switchTab({ url: '/pages/birthday/index' })
-    },
-
-    editMember(e: WechatMiniprogram.TouchEvent) {
-      wx.setStorageSync('little-family:editing-member', (e.currentTarget.dataset as { json: string }).json)
-      wx.navigateTo({ url: '/pages/member-edit/index' })
-    },
-
-    async setAsMe(e: WechatMiniprogram.TouchEvent) {
-      const memberId = (e.currentTarget.dataset as { id: string }).id
+    async decideLinkRequest(e: WechatMiniprogram.TouchEvent) {
+      const { id, status } = e.currentTarget.dataset as { id: string; status: 'approved' | 'rejected' }
       try {
-        await linkCurrentUser(this.data.activeFamilyId, memberId)
+        await decideMemberLinkRequest(this.data.activeFamilyId, id, status)
         invalidateFamilyData()
         await this.loadData()
-        wx.showToast({ title: '已设为我', icon: 'success' })
+        wx.showToast({ title: status === 'approved' ? '已通过' : '已拒绝', icon: 'success' })
       } catch (error) {
-        wx.showToast({ title: error instanceof Error ? error.message : '设置失败', icon: 'none' })
+        wx.showToast({ title: error instanceof Error ? error.message : '处理失败', icon: 'none' })
       }
-    },
-
-    removeMember(e: WechatMiniprogram.TouchEvent) {
-      const { id, name } = e.currentTarget.dataset as { id: string; name: string }
-      wx.showModal({
-        title: `删除 ${name}？`,
-        content: '相关亲缘关系也会一并删除，此操作无法撤销。',
-        success: async result => {
-          if (!result.confirm) return
-          try {
-            await deleteMember(this.data.activeFamilyId, id)
-            invalidateFamilyData()
-            await this.loadData()
-          } catch (error) {
-            wx.showToast({ title: error instanceof Error ? error.message : '删除失败', icon: 'none' })
-          }
-        },
-      })
     },
 
     async generateInvite() {

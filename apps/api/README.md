@@ -19,7 +19,7 @@ NODE_ENV=production
 ALLOW_DEV_LOGIN=false
 ```
 
-生日祝福和成员称呼生成功能还需要配置 `DEEPSEEK_API_KEY`；`DEEPSEEK_MODEL` 可选，默认使用 `deepseek-v4-flash`。生日祝福调用失败时，小程序会降级复制本地提示词；称呼生成失败时，API 会使用本地亲缘规则兜底并写入 `kinship_labels` 缓存表。
+生日祝福和成员称呼生成功能还需要配置 `DEEPSEEK_API_KEY`；`DEEPSEEK_MODEL` 可选，默认使用 `deepseek-v4-flash`。生日祝福调用失败时，小程序会降级复制本地提示词；普通快照查询只读取 `kinship_labels` 缓存，不会自动调用 DeepSeek。小程序生日管理页显式点击“刷新称呼”后，API 才会为当前账号关联成员重新生成全量称呼并写入缓存。称呼生成失败时，API 只显示旧数据备用称呼或“亲人”，不会使用本地亲缘规则推断。
 
 发布前先在项目根目录验证代码：
 

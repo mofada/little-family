@@ -23,7 +23,7 @@ interface FamilyContextValue {
   leaveCurrentFamily: () => Promise<void>;
   saveFamilyMember: (input: MemberInput, memberId?: string) => Promise<void>;
   deleteFamilyMember: (memberId: string) => Promise<void>;
-  setLinkedMember: (memberId: string | null) => Promise<void>;
+  setLinkedMember: (memberId: string | null) => Promise<"approved" | "pending">;
   refresh: () => Promise<void>;
 }
 
@@ -118,9 +118,10 @@ export function FamilyProvider({ children }: { children: React.ReactNode }) {
       await load(snapshot.family.id);
     },
     setLinkedMember: async (memberId) => {
-      if (!snapshot) return;
-      await linkCurrentUser(snapshot.family.id, memberId);
-      await load(snapshot.family.id);
+      if (!snapshot) return "approved";
+      const result = await linkCurrentUser(snapshot.family.id, memberId);
+      if (result.status === "approved") await load(snapshot.family.id);
+      return result.status;
     },
     refresh: () => load(snapshot?.family.id),
   }), [error, families, load, snapshot, status]);

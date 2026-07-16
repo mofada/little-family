@@ -100,6 +100,12 @@ export const setActiveFamilyId = (familyId: string): void => {
   wx.setStorageSync(ACTIVE_FAMILY_KEY, familyId)
 }
 
+export const getFamilyDataCacheKey = (): string => {
+  const token = wx.getStorageSync(TOKEN_KEY) as string
+  const familyId = wx.getStorageSync(ACTIVE_FAMILY_KEY) as string
+  return `${token || ''}:${familyId || ''}`
+}
+
 export const createFamily = async (name: string, description = ''): Promise<FamilySummary> => {
   await ensureAuth()
   const result = await request<{ family: FamilySummary }>('/api/families', 'POST', { name, description })
@@ -110,6 +116,11 @@ export const createFamily = async (name: string, description = ''): Promise<Fami
 export const fetchSnapshot = async (familyId: string): Promise<FamilySnapshot> => {
   await ensureAuth()
   return request<FamilySnapshot>(`/api/families/${familyId}/snapshot`)
+}
+
+export const refreshKinshipLabels = async (familyId: string): Promise<FamilySnapshot> => {
+  await ensureAuth()
+  return request<FamilySnapshot>(`/api/families/${familyId}/kinship-labels/refresh`, 'POST')
 }
 
 export const saveMember = async (
@@ -129,9 +140,37 @@ export const deleteMember = async (familyId: string, memberId: string): Promise<
   await request(`/api/families/${familyId}/members/${memberId}`, 'DELETE')
 }
 
-export const linkCurrentUser = async (familyId: string, memberId: string | null): Promise<void> => {
+export const linkCurrentUser = async (
+  familyId: string,
+  memberId: string | null,
+): Promise<{ linkedMemberId: string | null; status: 'approved' | 'pending' }> => {
   await ensureAuth()
-  await request(`/api/families/${familyId}/me`, 'PATCH', { memberId })
+  return request(`/api/families/${familyId}/me`, 'PATCH', { memberId })
+}
+
+export interface MemberLinkRequest {
+  id: string
+  userId: string
+  memberId: string
+  memberName: string
+  memberNickName?: string | null
+  userName?: string | null
+  createdAt: string
+}
+
+export const listMemberLinkRequests = async (familyId: string): Promise<MemberLinkRequest[]> => {
+  await ensureAuth()
+  const result = await request<{ requests: MemberLinkRequest[] }>(`/api/families/${familyId}/member-link-requests`)
+  return result.requests
+}
+
+export const decideMemberLinkRequest = async (
+  familyId: string,
+  requestId: string,
+  status: 'approved' | 'rejected',
+): Promise<void> => {
+  await ensureAuth()
+  await request(`/api/families/${familyId}/member-link-requests/${requestId}`, 'PATCH', { status })
 }
 
 export const leaveFamily = async (familyId: string): Promise<void> => {

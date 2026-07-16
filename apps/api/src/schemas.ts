@@ -134,6 +134,10 @@ export const linkMemberSchema = z.object({
   memberId: z.string().uuid().nullable(),
 })
 
+export const memberLinkRequestDecisionSchema = z.object({
+  status: z.enum(['approved', 'rejected']),
+})
+
 export const birthdaySubscriptionSchema = z.object({
   templateId: z.string().trim().min(1).max(100),
 })

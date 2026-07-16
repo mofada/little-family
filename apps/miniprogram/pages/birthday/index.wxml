@@ -14,6 +14,12 @@
         />
         <view wx:if="{{keyword}}" class="search-clear" bindtap="clearSearch">×</view>
       </view>
+      <view
+        wx:if="{{familyId}}"
+        class="refresh-relation-btn {{refreshingKinship ? 'refresh-relation-btn--loading' : ''}}"
+        bindtap="refreshKinshipLabels"
+        hover-class="action-pressed"
+      >{{refreshingKinship ? '刷新中' : '刷新称呼'}}</view>
       <view wx:if="{{canAddMember}}" class="add-member-btn" bindtap="startAddMember" hover-class="action-pressed">添加</view>
     </view>
     <view class="filter-chips">
@@ -57,10 +63,10 @@
       >{{subscriptionMode === 'long_term' ? (activeGrantCount > 0 ? '已开启' : '开启提醒') : '订阅提醒'}}</button>
     </view>
 
-    <view wx:if="{{monthSections.length === 0}}" class="empty-state">
+    <view wx:if="{{monthSections.length === 0 && noBirthdayMembers.length === 0}}" class="empty-state">
       <view class="empty-state__art"><text>生日</text></view>
       <text class="empty-state__title">{{keyword || filterType !== 'all' ? '没有找到相关成员' : '还没有生日资料'}}</text>
-      <text class="empty-state__desc">{{keyword || filterType !== 'all' ? '换个姓名或生日类型试试' : '可在家庭与成员管理中逐步补充'}}</text>
+      <text class="empty-state__desc">{{keyword || filterType !== 'all' ? '换个姓名或生日类型试试' : '点击上方添加，先录入家人资料'}}</text>
     </view>
 
     <view wx:if="{{todayMembers.length > 0}}" class="today-section">
@@ -84,6 +90,9 @@
         </view>
         <view wx:if="{{item.canEdit}}" class="edit-btn" catchtap="editMember" data-json="{{item.memberJson}}" data-can-edit="{{item.canEdit}}">
           <text>编辑</text>
+        </view>
+        <view class="self-btn {{item.isLinked ? 'self-btn--active' : ''}}" catchtap="setAsMe" data-id="{{item.id}}" data-linked="{{item.isLinked}}">
+          <text>{{item.selfActionLabel}}</text>
         </view>
       </view>
     </view>
@@ -115,8 +124,46 @@
           <view wx:if="{{member.canEdit}}" class="edit-btn" catchtap="editMember" data-json="{{member.memberJson}}" data-can-edit="{{member.canEdit}}">
             <text>编辑</text>
           </view>
+          <view class="self-btn {{member.isLinked ? 'self-btn--active' : ''}}" catchtap="setAsMe" data-id="{{member.id}}" data-linked="{{member.isLinked}}">
+            <text>{{member.selfActionLabel}}</text>
+          </view>
           <view wx:if="{{!member.isBirthday}}" class="countdown {{member.isUrgent ? 'countdown--urgent' : ''}}">
             <text>{{member.countdownLabel}}</text>
+            <text class="row-arrow">›</text>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <view wx:if="{{noBirthdayMembers.length > 0}}" class="month-section">
+      <view class="month-header">
+        <view class="month-heading">
+          <view class="month-marker month-marker--muted"></view>
+          <text class="month-title">未录生日</text>
+        </view>
+        <text class="month-count">共 {{noBirthdayMembers.length}} 人</text>
+      </view>
+      <view class="month-card">
+        <view wx:for="{{noBirthdayMembers}}" wx:key="id" class="member-row" bindtap="onMemberTap" data-json="{{item.memberJson}}">
+          <view class="date-card date-card--empty">
+            <text class="date-card__day">--</text>
+            <text class="date-card__week">待补</text>
+          </view>
+          <view class="member-info">
+            <view class="member-name-row">
+              <text class="member-name">{{item.name}}</text>
+              <text class="relation-tag">{{item.relation || '成员'}}</text>
+            </view>
+            <text class="member-sub">还没有记录生日</text>
+          </view>
+          <view wx:if="{{item.canEdit}}" class="edit-btn" catchtap="editMember" data-json="{{item.memberJson}}" data-can-edit="{{item.canEdit}}">
+            <text>编辑</text>
+          </view>
+          <view class="self-btn {{item.isLinked ? 'self-btn--active' : ''}}" catchtap="setAsMe" data-id="{{item.id}}" data-linked="{{item.isLinked}}">
+            <text>{{item.selfActionLabel}}</text>
+          </view>
+          <view wx:if="{{!item.canEdit}}" class="countdown">
+            <text>待补充</text>
             <text class="row-arrow">›</text>
           </view>
         </view>

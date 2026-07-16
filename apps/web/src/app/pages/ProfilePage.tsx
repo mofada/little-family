@@ -7,7 +7,10 @@ import { familyMembers, calculateAge, getDaysUntilBirthday } from "../data/famil
 import { FamilyMember } from "../types/family";
 import MemberDetailModal from "../components/MemberDetailModal";
 import { useFamily } from "../context/FamilyContext";
-import type { MemberInput } from "../services/api";
+import {
+  decideMemberLinkRequest, listMemberLinkRequests,
+  type MemberInput, type MemberLinkRequest,
+} from "../services/api";
 
 const memberColor = (member: FamilyMember) => member.gender === "male" ? "#4f7fbf" : member.gender === "female" ? "#d47586" : "#8b817d";
 
@@ -204,8 +207,8 @@ export function MemberManagePanel() {
     setBusy(true);
     setMessage("");
     try {
-      await setLinkedMember(linkedMemberId === memberId ? null : memberId);
-      setMessage(linkedMemberId === memberId ? "已取消本人关联" : "已更新本人关联");
+      const status = await setLinkedMember(linkedMemberId === memberId ? null : memberId);
+      setMessage(linkedMemberId === memberId ? "已取消本人关联" : status === "pending" ? "已提交认领审批" : "已更新本人关联");
     } catch (cause) {
       setMessage(cause instanceof Error ? cause.message : "关联失败");
     } finally {
@@ -402,6 +405,32 @@ export default function ProfilePage() {
   const [relationResult, setRelationResult] = useState<string>("");
   const [relationPath, setRelationPath] = useState<FamilyMember[]>([]);
   const [detailMember, setDetailMember] = useState<FamilyMember | null>(null);
+  const [linkRequests, setLinkRequests] = useState<MemberLinkRequest[]>([]);
+  const [approvalMessage, setApprovalMessage] = useState("");
+
+  const canApproveLink = snapshot?.family.role === "owner" || snapshot?.family.role === "admin";
+
+  useEffect(() => {
+    if (!snapshot || !canApproveLink) {
+      setLinkRequests([]);
+      return;
+    }
+    void listMemberLinkRequests(snapshot.family.id)
+      .then(setLinkRequests)
+      .catch(() => setLinkRequests([]));
+  }, [canApproveLink, snapshot]);
+
+  const decideLink = async (requestId: string, status: "approved" | "rejected") => {
+    if (!snapshot) return;
+    setApprovalMessage("");
+    try {
+      await decideMemberLinkRequest(snapshot.family.id, requestId, status);
+      setLinkRequests((current) => current.filter((item) => item.id !== requestId));
+      setApprovalMessage(status === "approved" ? "已通过认领申请" : "已拒绝认领申请");
+    } catch (cause) {
+      setApprovalMessage(cause instanceof Error ? cause.message : "处理失败");
+    }
+  };
 
   const me = familyMembers.find(m => m.id === snapshot?.family.linkedMemberId) ?? null;
   const myColor = me?.gender === "female" ? "#d47586" : me?.gender === "male" ? "#4f7fbf" : "#a8866c";
@@ -567,6 +596,22 @@ export default function ProfilePage() {
               {families.length > 1 && <select value={snapshot?.family.id} onChange={(event) => void switchFamily(event.target.value)} className="rounded-xl bg-[#f7f3ef] border border-[#eadfd8] px-3 py-2 text-sm">{families.map(family => <option key={family.id} value={family.id}>{family.name}</option>)}</select>}
             </div>
             <button onClick={() => void signOut()} className="mt-4 w-full rounded-2xl border border-[#eadfd8] py-3 text-sm font-bold text-gray-500 flex items-center justify-center gap-2"><LogOut size={16} />退出网页版</button>
+            {linkRequests.length > 0 && (
+              <div className="mt-4 border-t border-gray-100 pt-4 space-y-2">
+                <p className="text-sm font-black text-[#2d1f1a]">认领审批</p>
+                {linkRequests.map((item) => (
+                  <div key={item.id} className="flex items-center gap-3 rounded-2xl bg-[#f7f3ef] px-4 py-3">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-bold text-[#2d1f1a] truncate">{item.memberName}</p>
+                      <p className="text-xs text-gray-400">有家人申请将此成员设为自己</p>
+                    </div>
+                    <button onClick={() => void decideLink(item.id, "approved")} className="rounded-xl bg-[#6b9d8a] px-3 py-2 text-xs font-bold text-white">通过</button>
+                    <button onClick={() => void decideLink(item.id, "rejected")} className="rounded-xl bg-[#fff1f1] px-3 py-2 text-xs font-bold text-[#b91c1c]">拒绝</button>
+                  </div>
+                ))}
+              </div>
+            )}
+            {approvalMessage && <p className="mt-3 text-center text-xs text-[#8a5f5a]">{approvalMessage}</p>}
           </div>
         </section>
 

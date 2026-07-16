@@ -22,13 +22,16 @@
       </view>
     </view>
 
-    <view wx:if="{{activeFamilyId}}" class="card member-entry-card">
-      <view class="title-row">
-        <view><text class="card-title">成员资料</text><text class="sub">{{members.length}} 人 · {{activeRoleLabel}}</text></view>
-        <view class="small-button primary" bindtap="goBirthday" hover-class="action-pressed">打开生日管理</view>
+    <view wx:if="{{activeFamilyId && canApproveLink && linkRequests.length > 0}}" class="card">
+      <text class="card-title">认领审批</text>
+      <view wx:for="{{linkRequests}}" wx:key="id" class="approval-row">
+        <view class="approval-info">
+          <text class="member-name">{{item.memberName}}</text>
+          <text class="sub">有家人申请将此成员设为自己</text>
+        </view>
+        <view class="text-button" bindtap="decideLinkRequest" data-id="{{item.id}}" data-status="approved" hover-class="action-pressed">通过</view>
+        <view class="text-button danger" bindtap="decideLinkRequest" data-id="{{item.id}}" data-status="rejected" hover-class="action-pressed">拒绝</view>
       </view>
-      <text class="sub">新增、编辑生日和成员关系已经移到“生日管理”，列表里每位成员可直接编辑。</text>
-      <view wx:if="{{activeRole && activeRole !== 'owner'}}" class="full-button muted" bindtap="leaveCurrentFamily" hover-class="action-pressed">退出当前家庭</view>
     </view>
 
     <view wx:if="{{activeFamilyId && canInvite}}" class="card">
@@ -61,6 +64,12 @@
       <text class="sub">生成一次性登录码，在网页版输入即可同步查看你的家庭数据；登录码 5 分钟内有效。</text>
       <view class="full-button" bindtap="generateWebLoginCode" hover-class="action-pressed">生成并复制网页登录码</view>
       <text wx:if="{{webLoginCode}}" class="invite-code">{{webLoginCode}}</text>
+    </view>
+
+    <view wx:if="{{activeFamilyId && activeRole && activeRole !== 'owner'}}" class="card">
+      <text class="card-title">退出家庭</text>
+      <text class="sub">退出后将无法继续查看这个家庭，除非再次通过邀请码加入。</text>
+      <view class="full-button muted" bindtap="leaveCurrentFamily" hover-class="action-pressed">退出当前家庭</view>
     </view>
   </scroll-view>
 </view>

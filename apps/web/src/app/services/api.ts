@@ -121,10 +121,39 @@ export const deleteMember = async (familyId: string, memberId: string): Promise<
   await request(`/api/families/${familyId}/members/${memberId}`, { method: "DELETE" });
 };
 
-export const linkCurrentUser = async (familyId: string, memberId: string | null): Promise<void> => {
-  await request(`/api/families/${familyId}/me`, {
+export const linkCurrentUser = async (
+  familyId: string,
+  memberId: string | null,
+): Promise<{ linkedMemberId: string | null; status: "approved" | "pending" }> => {
+  return request(`/api/families/${familyId}/me`, {
     method: "PATCH",
     body: JSON.stringify({ memberId }),
+  });
+};
+
+export interface MemberLinkRequest {
+  id: string;
+  userId: string;
+  memberId: string;
+  memberName: string;
+  memberNickName?: string | null;
+  userName?: string | null;
+  createdAt: string;
+}
+
+export const listMemberLinkRequests = async (familyId: string): Promise<MemberLinkRequest[]> => {
+  const result = await request<{ requests: MemberLinkRequest[] }>(`/api/families/${familyId}/member-link-requests`);
+  return result.requests;
+};
+
+export const decideMemberLinkRequest = async (
+  familyId: string,
+  requestId: string,
+  status: "approved" | "rejected",
+): Promise<void> => {
+  await request(`/api/families/${familyId}/member-link-requests/${requestId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ status }),
   });
 };
 

@@ -9,14 +9,13 @@ import { createSession, requireAuth, requireFamilyRole, resolveWechatUser, sha25
 import { exchangeWechatCode, exchangeWechatWebsiteCode } from './wechat'
 import {
   birthdaySubscriptionSchema, familySchema, invitationSchema,
-  legacyFamilyImportSchema, linkMemberSchema, loginSchema, memberSchema,
+  legacyFamilyImportSchema, linkMemberSchema, loginSchema, memberLinkRequestDecisionSchema, memberSchema,
   wechatWebLoginSchema, webLoginSchema,
 } from './schemas'
 import { AppError, type AuthenticatedRequest, type FamilyRole } from './types'
 import { BIRTHDAY_TEMPLATE } from './birthdayTemplate'
 import { getBeijingClock } from './birthdayClock'
 import { generateBirthdayWish, generateKinshipLabels } from './deepseek'
-import { inferKinshipLabel } from './kinship'
 
 const now = (): string => new Date().toISOString()
 
@@ -188,14 +187,19 @@ const clearFamilyKinshipLabels = (familyId: string): void => {
   db.prepare('DELETE FROM kinship_labels WHERE family_id = ?').run(familyId)
 }
 
+const fallbackKinshipLabel = (viewerMemberId: string | null | undefined, member: MemberRow): string => {
+  if (viewerMemberId && member.id === viewerMemberId) return '自己'
+  return member.relation_label || '亲人'
+}
+
 const loadKinshipLabels = async (
   familyId: string,
   viewerMemberId: string | null | undefined,
   members: MemberRow[],
-  relationships: RelationshipRow[],
 ): Promise<Map<string, string>> => {
   const labels = new Map<string, string>()
-  if (!viewerMemberId || !members.some(member => member.id === viewerMemberId)) return labels
+  const memberIds = new Set(members.map(member => member.id))
+  if (!viewerMemberId || !memberIds.has(viewerMemberId)) return labels
   labels.set(viewerMemberId, '自己')
 
   const cachedRows = db.prepare(`
@@ -203,19 +207,28 @@ const loadKinshipLabels = async (
     WHERE family_id = ? AND from_member_id = ?
   `).all(familyId, viewerMemberId) as unknown as KinshipLabelRow[]
   cachedRows.forEach(row => {
-    if (members.some(member => member.id === row.to_member_id)) labels.set(row.to_member_id, row.label)
+    const label = sanitizeKinshipLabel(row.label)
+    if (memberIds.has(row.to_member_id) && label) labels.set(row.to_member_id, label)
   })
 
-  const missingMembers = members.filter(member => !labels.has(member.id))
-  if (missingMembers.length === 0) return labels
+  return labels
+}
 
-  const fallbackLabels = new Map(missingMembers.map(member => [
-    member.id,
-    inferKinshipLabel(viewerMemberId, member.id, members, relationships),
-  ]))
-  let generatedLabels: Map<string, string> | null = null
-  let source: 'deepseek' | 'heuristic' = 'heuristic'
-  try {
+const refreshKinshipLabels = async (
+  familyId: string,
+  viewerMemberId: string | null | undefined,
+  members: MemberRow[],
+  relationships: RelationshipRow[],
+): Promise<Map<string, string>> => {
+  const labels = new Map<string, string>()
+  const memberIds = new Set(members.map(member => member.id))
+  if (!viewerMemberId || !memberIds.has(viewerMemberId)) {
+    throw new AppError(400, '请先在家庭管理中把成员设为我', 'LINKED_MEMBER_REQUIRED')
+  }
+  labels.set(viewerMemberId, '自己')
+  const targetMembers = members.filter(member => member.id !== viewerMemberId)
+  let generatedLabels = new Map<string, string>()
+  if (targetMembers.length > 0) {
     const viewer = members.find(member => member.id === viewerMemberId)!
     generatedLabels = await generateKinshipLabels({
       viewer: {
@@ -224,12 +237,12 @@ const loadKinshipLabels = async (
         gender: viewer.gender,
         birthYear: viewer.birth_year,
       },
-      targets: missingMembers.map(member => ({
+      targets: targetMembers.map(member => ({
         id: member.id,
         name: member.name,
         gender: member.gender,
         birthYear: member.birth_year,
-        fallback: fallbackLabels.get(member.id) ?? '亲人',
+        fallback: fallbackKinshipLabel(viewerMemberId, member),
       })),
       members: members.map(member => ({
         id: member.id,
@@ -243,12 +256,11 @@ const loadKinshipLabels = async (
         type: relationship.type,
       })),
     })
-    source = 'deepseek'
-  } catch {
-    generatedLabels = fallbackLabels
   }
 
   const timestamp = now()
+  db.prepare('DELETE FROM kinship_labels WHERE family_id = ? AND from_member_id = ?')
+    .run(familyId, viewerMemberId)
   const upsert = db.prepare(`
     INSERT INTO kinship_labels
       (id, family_id, from_member_id, to_member_id, label, source, created_at, updated_at)
@@ -256,10 +268,21 @@ const loadKinshipLabels = async (
     ON CONFLICT(family_id, from_member_id, to_member_id)
     DO UPDATE SET label = excluded.label, source = excluded.source, updated_at = excluded.updated_at
   `)
-  missingMembers.forEach(member => {
-    const label = sanitizeKinshipLabel(generatedLabels?.get(member.id) ?? fallbackLabels.get(member.id) ?? '亲人') || '亲人'
+  targetMembers.forEach(member => {
+    const generated = generatedLabels.get(member.id)
+    const generatedLabel = generated ? sanitizeKinshipLabel(generated) : ''
+    const label = generatedLabel || fallbackKinshipLabel(viewerMemberId, member)
     labels.set(member.id, label)
-    upsert.run(randomUUID(), familyId, viewerMemberId, member.id, label, source, timestamp, timestamp)
+    upsert.run(
+      randomUUID(),
+      familyId,
+      viewerMemberId,
+      member.id,
+      label,
+      generatedLabel ? 'deepseek' : 'heuristic',
+      timestamp,
+      timestamp,
+    )
   })
 
   return labels
@@ -276,7 +299,7 @@ const getSnapshot = async (familyId: string, viewerMemberId?: string | null) => 
     FROM relationships WHERE family_id = ?
   `).all(familyId) as unknown as RelationshipRow[]
   const generations = inferGenerations(members.map(member => member.id), relationships)
-  const kinshipLabels = await loadKinshipLabels(familyId, viewerMemberId, members, relationships)
+  const kinshipLabels = await loadKinshipLabels(familyId, viewerMemberId, members)
   members.sort((a, b) => (generations.get(a.id)! - generations.get(b.id)!) || a.created_at.localeCompare(b.created_at))
 
   return {
@@ -297,7 +320,7 @@ const getSnapshot = async (familyId: string, viewerMemberId?: string | null) => 
         generation: generations.get(member.id) ?? 1,
         name: member.name,
         nickName: member.nickname ?? undefined,
-        relation: kinshipLabels.get(member.id) ?? inferKinshipLabel(viewerMemberId, member.id, members, relationships),
+        relation: kinshipLabels.get(member.id) ?? fallbackKinshipLabel(viewerMemberId, member),
         birthYear: member.birth_year,
         gender: member.gender,
         birthdayType: member.birthday_type,
@@ -318,6 +341,14 @@ const getSnapshot = async (familyId: string, viewerMemberId?: string | null) => 
 const assertMemberInFamily = (memberId: string, familyId: string): void => {
   const found = db.prepare('SELECT 1 FROM members WHERE id = ? AND family_id = ?').get(memberId, familyId)
   if (!found) throw new AppError(400, '关联成员不存在或不属于当前家庭', 'INVALID_RELATED_MEMBER')
+}
+
+const assertMemberNotLinkedByOtherUser = (familyId: string, memberId: string, userId: string): void => {
+  const linked = db.prepare(`
+    SELECT user_id FROM family_users
+    WHERE family_id = ? AND linked_member_id = ? AND user_id <> ?
+  `).get(familyId, memberId, userId)
+  if (linked) throw new AppError(409, '该成员已被其他账号关联', 'MEMBER_ALREADY_LINKED')
 }
 
 const replaceMemberRelationships = (
@@ -552,16 +583,130 @@ app.get('/api/families/:familyId/snapshot', async (request: Request, response) =
   response.json({ family: { ...family as object, role }, ...await getSnapshot(familyId, linkedMemberId) })
 })
 
+app.post('/api/families/:familyId/kinship-labels/refresh', async (request: Request, response) => {
+  const { authUser } = request as AuthenticatedRequest
+  const familyId = routeParam(request, 'familyId')
+  const role = requireFamilyRole(authUser.id, familyId, 'viewer')
+  const family = db.prepare(`
+    SELECT families.id, families.name, families.description,
+           family_users.linked_member_id AS linkedMemberId,
+           (SELECT COUNT(*) FROM members WHERE members.family_id = families.id) AS memberCount
+    FROM families JOIN family_users ON family_users.family_id = families.id
+    WHERE families.id = ? AND family_users.user_id = ?
+  `).get(familyId, authUser.id)
+  const linkedMemberId = (family as { linkedMemberId?: string | null } | undefined)?.linkedMemberId
+  const members = db.prepare(`
+    SELECT id, name, nickname, relation_label, birth_year,
+           gender, birthday_type, birth_month, birth_day, is_leap_month, created_at
+    FROM members WHERE family_id = ?
+  `).all(familyId) as unknown as MemberRow[]
+  const relationships = db.prepare(`
+    SELECT id, from_member_id, to_member_id, type
+    FROM relationships WHERE family_id = ?
+  `).all(familyId) as unknown as RelationshipRow[]
+  console.info('[kinship]', JSON.stringify({
+    event: 'refresh_requested',
+    familyIdSuffix: familyId.slice(-8),
+    hasLinkedMember: Boolean(linkedMemberId),
+    memberCount: members.length,
+    targetCount: linkedMemberId ? Math.max(0, members.length - 1) : 0,
+    relationshipCount: relationships.length,
+  }))
+  await refreshKinshipLabels(familyId, linkedMemberId, members, relationships)
+  response.json({ family: { ...family as object, role }, ...await getSnapshot(familyId, linkedMemberId) })
+})
+
 app.patch('/api/families/:familyId/me', (request: Request, response) => {
   const { authUser } = request as AuthenticatedRequest
   const familyId = routeParam(request, 'familyId')
-  requireFamilyRole(authUser.id, familyId, 'viewer')
+  const role = requireFamilyRole(authUser.id, familyId, 'viewer')
   const input = linkMemberSchema.parse(request.body)
-  if (input.memberId) assertMemberInFamily(input.memberId, familyId)
+  if (!input.memberId) {
+    db.prepare(`
+      UPDATE family_users SET linked_member_id = ? WHERE family_id = ? AND user_id = ?
+    `).run(null, familyId, authUser.id)
+    response.json({ linkedMemberId: null, status: 'approved' })
+    return
+  }
+  assertMemberInFamily(input.memberId, familyId)
+  assertMemberNotLinkedByOtherUser(familyId, input.memberId, authUser.id)
+  if (role !== 'owner' && role !== 'admin') {
+    const timestamp = now()
+    const existing = db.prepare(`
+      SELECT id FROM member_link_requests
+      WHERE family_id = ? AND user_id = ? AND status = 'pending'
+    `).get(familyId, authUser.id) as { id: string } | undefined
+    if (existing) {
+      db.prepare(`
+        UPDATE member_link_requests SET member_id = ?, updated_at = ?
+        WHERE id = ?
+      `).run(input.memberId, timestamp, existing.id)
+    } else {
+      db.prepare(`
+        INSERT INTO member_link_requests (
+          id, family_id, user_id, member_id, status, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, 'pending', ?, ?)
+      `).run(randomUUID(), familyId, authUser.id, input.memberId, timestamp, timestamp)
+    }
+    audit(familyId, authUser.id, 'request_link', 'member', input.memberId)
+    response.status(202).json({ linkedMemberId: null, status: 'pending' })
+    return
+  }
   db.prepare(`
     UPDATE family_users SET linked_member_id = ? WHERE family_id = ? AND user_id = ?
   `).run(input.memberId, familyId, authUser.id)
-  response.json({ linkedMemberId: input.memberId })
+  response.json({ linkedMemberId: input.memberId, status: 'approved' })
+})
+
+app.get('/api/families/:familyId/member-link-requests', (request: Request, response) => {
+  const { authUser } = request as AuthenticatedRequest
+  const familyId = routeParam(request, 'familyId')
+  requireFamilyRole(authUser.id, familyId, 'admin')
+  const requests = db.prepare(`
+    SELECT member_link_requests.id,
+           member_link_requests.user_id AS userId,
+           member_link_requests.member_id AS memberId,
+           members.name AS memberName,
+           members.nickname AS memberNickName,
+           users.nickname AS userName,
+           member_link_requests.created_at AS createdAt
+    FROM member_link_requests
+    JOIN members ON members.id = member_link_requests.member_id
+    JOIN users ON users.id = member_link_requests.user_id
+    WHERE member_link_requests.family_id = ? AND member_link_requests.status = 'pending'
+    ORDER BY member_link_requests.created_at ASC
+  `).all(familyId)
+  response.json({ requests })
+})
+
+app.patch('/api/families/:familyId/member-link-requests/:requestId', (request: Request, response) => {
+  const { authUser } = request as AuthenticatedRequest
+  const familyId = routeParam(request, 'familyId')
+  const requestId = routeParam(request, 'requestId')
+  requireFamilyRole(authUser.id, familyId, 'admin')
+  const input = memberLinkRequestDecisionSchema.parse(request.body)
+  const pending = db.prepare(`
+    SELECT id, user_id AS userId, member_id AS memberId
+    FROM member_link_requests
+    WHERE id = ? AND family_id = ? AND status = 'pending'
+  `).get(requestId, familyId) as { id: string; userId: string; memberId: string } | undefined
+  if (!pending) throw new AppError(404, '认领申请不存在或已处理', 'LINK_REQUEST_NOT_FOUND')
+  if (input.status === 'approved') assertMemberNotLinkedByOtherUser(familyId, pending.memberId, pending.userId)
+  const timestamp = now()
+  transaction(() => {
+    db.prepare(`
+      UPDATE member_link_requests
+      SET status = ?, decided_by = ?, decided_at = ?, updated_at = ?
+      WHERE id = ? AND family_id = ?
+    `).run(input.status, authUser.id, timestamp, timestamp, requestId, familyId)
+    if (input.status === 'approved') {
+      db.prepare(`
+        UPDATE family_users SET linked_member_id = ? WHERE family_id = ? AND user_id = ?
+      `).run(pending.memberId, familyId, pending.userId)
+    }
+    audit(familyId, authUser.id, input.status === 'approved' ? 'approve_link' : 'reject_link', 'member', pending.memberId, { userId: pending.userId })
+  })
+  response.json({ status: input.status })
 })
 
 app.delete('/api/families/:familyId/me', (request: Request, response) => {
@@ -632,15 +777,11 @@ app.post('/api/families/:familyId/members/:memberId/birthday-wish', birthdayWish
   const currentUser = db.prepare(`
     SELECT linked_member_id AS linkedMemberId FROM family_users WHERE family_id = ? AND user_id = ?
   `).get(familyId, authUser.id) as { linkedMemberId?: string | null } | undefined
-  const relationships = db.prepare(`
-    SELECT id, from_member_id, to_member_id, type
-    FROM relationships WHERE family_id = ?
-  `).all(familyId) as unknown as RelationshipRow[]
   const members = db.prepare(`
     SELECT id, name, gender, birth_year, relation_label FROM members WHERE family_id = ?
   `).all(familyId) as unknown as MemberRow[]
-  const kinshipLabels = await loadKinshipLabels(familyId, currentUser?.linkedMemberId, members, relationships)
-  const relationLabel = kinshipLabels.get(memberId) ?? inferKinshipLabel(currentUser?.linkedMemberId, memberId, members, relationships)
+  const kinshipLabels = await loadKinshipLabels(familyId, currentUser?.linkedMemberId, members)
+  const relationLabel = kinshipLabels.get(memberId) ?? fallbackKinshipLabel(currentUser?.linkedMemberId, member)
   const wish = await generateBirthdayWish(buildBirthdayPrompt(member, relationLabel))
   response.json({ wish })
 })

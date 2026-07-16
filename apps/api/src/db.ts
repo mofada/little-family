@@ -94,6 +94,20 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_family_users_user ON family_users(user_id);
 
+  CREATE TABLE IF NOT EXISTS member_link_requests (
+    id TEXT PRIMARY KEY,
+    family_id TEXT NOT NULL REFERENCES families(id) ON DELETE CASCADE,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    member_id TEXT NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+    status TEXT NOT NULL CHECK(status IN ('pending', 'approved', 'rejected')),
+    decided_by TEXT REFERENCES users(id),
+    decided_at TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_member_link_requests_family_status
+    ON member_link_requests(family_id, status, created_at);
+
   CREATE TABLE IF NOT EXISTS members (
     id TEXT PRIMARY KEY,
     family_id TEXT NOT NULL REFERENCES families(id) ON DELETE CASCADE,

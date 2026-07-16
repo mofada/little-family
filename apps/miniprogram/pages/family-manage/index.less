@@ -6,7 +6,7 @@
 .card-title { display: block; font-size: 32rpx; font-weight: 700; color: var(--color-primary); margin-bottom: 18rpx; }
 .sub { display: block; font-size: 23rpx; color: var(--color-text-sub); margin-top: 5rpx; }
 .picker-value { padding: 22rpx; border-radius: 16rpx; background: var(--color-bg); display: flex; justify-content: space-between; margin-bottom: 18rpx; }
-.form-row, .title-row, .member-row { display: flex; width: 100%; min-width: 0; box-sizing: border-box; align-items: center; gap: 12rpx; }
+.form-row, .title-row, .member-row, .approval-row { display: flex; width: 100%; min-width: 0; box-sizing: border-box; align-items: center; gap: 12rpx; }
 .title-row { justify-content: space-between; margin-bottom: 12rpx; }
 .title-row > view:first-child { min-width: 0; }
 .title-row .card-title { margin-bottom: 0; }
@@ -14,7 +14,9 @@
 .small-button { flex: none; min-width: 128rpx; box-sizing: border-box; padding: 16rpx 22rpx; border-radius: 16rpx; font-size: 24rpx; line-height: 1.4; text-align: center; white-space: nowrap; color: var(--color-primary); background: #eee8e4; }
 .primary, .full-button { color: #fff; background: var(--color-accent); }
 .member-row { padding: 20rpx 0; border-bottom: 1rpx solid #f2ece8; }
-.member-info { flex: 1; width: 0; min-width: 0; }
+.member-info, .approval-info { flex: 1; width: 0; min-width: 0; }
+.approval-row { padding: 18rpx 0; border-bottom: 1rpx solid #f2ece8; }
+.approval-row:last-child { border-bottom: 0; }
 .member-name { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 28rpx; font-weight: 650; color: var(--color-primary); }
 .text-button { flex: none; padding: 8rpx 12rpx; font-size: 22rpx; line-height: 1.4; white-space: nowrap; color: var(--color-accent); background: transparent; }
 .danger { color: #b91c1c; }

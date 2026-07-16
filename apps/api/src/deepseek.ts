@@ -5,6 +5,22 @@ interface DeepSeekResponse {
   choices?: Array<{ message?: { content?: string | null } }>
 }
 
+const textPreview = (value: string, limit = 500): string =>
+  value.replace(/\s+/g, ' ').trim().slice(0, limit)
+
+const describeError = (error: unknown): string => {
+  if (error instanceof Error) return `${error.name}: ${error.message}`
+  return String(error)
+}
+
+const logDeepSeekDiagnostic = (event: string, detail: Record<string, unknown>): void => {
+  console.error('[deepseek]', JSON.stringify({
+    event,
+    model: config.deepseekModel,
+    ...detail,
+  }))
+}
+
 const callDeepSeek = async (
   systemPrompt: string,
   userPrompt: string,
@@ -31,22 +47,63 @@ const callDeepSeek = async (
       }),
       signal: AbortSignal.timeout(15_000),
     })
-  } catch {
+  } catch (error) {
+    logDeepSeekDiagnostic('request_failed', {
+      code: errorCode,
+      error: describeError(error),
+      maxTokens,
+    })
     throw new AppError(502, errorMessage, errorCode)
   }
 
   if (!response.ok) {
+    let bodyPreview = ''
+    try {
+      bodyPreview = textPreview(await response.text())
+    } catch (error) {
+      bodyPreview = `读取响应体失败：${describeError(error)}`
+    }
+    logDeepSeekDiagnostic('http_error', {
+      code: errorCode,
+      status: response.status,
+      statusText: response.statusText,
+      bodyPreview,
+      maxTokens,
+    })
+    throw new AppError(502, errorMessage, errorCode)
+  }
+
+  let responseText = ''
+  try {
+    responseText = await response.text()
+  } catch (error) {
+    logDeepSeekDiagnostic('read_body_failed', {
+      code: errorCode,
+      error: describeError(error),
+      maxTokens,
+    })
     throw new AppError(502, errorMessage, errorCode)
   }
 
   let result: DeepSeekResponse
   try {
-    result = await response.json() as DeepSeekResponse
-  } catch {
+    result = JSON.parse(responseText) as DeepSeekResponse
+  } catch (error) {
+    logDeepSeekDiagnostic('json_parse_failed', {
+      code: errorCode,
+      error: describeError(error),
+      bodyPreview: textPreview(responseText),
+      maxTokens,
+    })
     throw new AppError(502, errorMessage, errorCode)
   }
   const content = result.choices?.[0]?.message?.content?.trim()
   if (!content) {
+    logDeepSeekDiagnostic('empty_content', {
+      code: errorCode,
+      bodyPreview: textPreview(responseText),
+      maxTokens,
+    })
     throw new AppError(502, errorMessage, errorCode)
   }
   return content
@@ -96,12 +153,25 @@ export interface KinshipLabelRequest {
 const parseJsonObject = (content: string): Record<string, unknown> => {
   try {
     return JSON.parse(content) as Record<string, unknown>
-  } catch {
+  } catch (error) {
     const match = content.match(/\{[\s\S]*\}/)
-    if (!match) throw new AppError(502, '称呼生成失败', 'KINSHIP_LABEL_GENERATION_FAILED')
+    if (!match) {
+      logDeepSeekDiagnostic('kinship_json_object_not_found', {
+        code: 'KINSHIP_LABEL_GENERATION_FAILED',
+        error: describeError(error),
+        contentPreview: textPreview(content),
+      })
+      throw new AppError(502, '称呼生成失败', 'KINSHIP_LABEL_GENERATION_FAILED')
+    }
     try {
       return JSON.parse(match[0]) as Record<string, unknown>
-    } catch {
+    } catch (innerError) {
+      logDeepSeekDiagnostic('kinship_json_object_parse_failed', {
+        code: 'KINSHIP_LABEL_GENERATION_FAILED',
+        error: describeError(innerError),
+        contentPreview: textPreview(content),
+        objectPreview: textPreview(match[0]),
+      })
       throw new AppError(502, '称呼生成失败', 'KINSHIP_LABEL_GENERATION_FAILED')
     }
   }
@@ -119,7 +189,14 @@ export const generateKinshipLabels = async (
       '你是中文亲属称谓专家。',
       '根据家庭成员、父母关系和配偶关系，生成“当前用户如何称呼目标成员”的简体中文称呼。',
       '只返回 JSON 对象，key 是目标成员 id，value 是称呼。',
-      '称呼要短、自然、适合家庭小程序展示，例如：自己、爸爸、妈妈、哥哥、外甥女、表侄、妻子的外甥女、远亲、姻亲。',
+      '称呼要短、自然、适合家庭小程序展示，例如：自己、爸爸、妈妈、哥哥、外甥女、表侄、奶奶、舅妈、姨父。',
+      '如果需要区分哥哥/弟弟、姐姐/妹妹、姐夫/妹夫、嫂子/弟媳，必须优先根据成员 birthYear 判断年龄；birthYear 越小年龄越大。',
+      '不要输出“姐夫/妹夫”“哥哥/弟弟”这类带斜杠的不确定称呼，除非确实缺少出生年份。',
+      '配偶的亲兄弟姐妹直接按配偶视角称呼为哥哥、弟弟、姐姐、妹妹，不要加“妻子的”或“丈夫的”前缀。',
+      '配偶的兄弟姐妹的配偶也按家庭日常称呼为姐夫、妹夫、嫂子、弟妹，不要加“妻子的”或“丈夫的”前缀。',
+      '不要输出“姻亲”这种泛称；能按具体亲戚关系称呼时必须输出具体称呼。',
+      '母亲的母亲的儿子的妻子称为舅妈；母亲的母亲的女儿的丈夫称为姨父。',
+      '父亲的父亲的妻子称为奶奶；母亲的母亲的丈夫称为外公。',
       '不要输出解释、Markdown 或代码块。',
     ].join('\n'),
     JSON.stringify(input),
@@ -137,6 +214,12 @@ export const generateKinshipLabels = async (
     if (label) labels.set(target.id, label)
   })
   if (labels.size === 0) {
+    logDeepSeekDiagnostic('kinship_no_valid_labels', {
+      code: 'KINSHIP_LABEL_GENERATION_FAILED',
+      targetCount: input.targets.length,
+      parsedKeyCount: Object.keys(parsed).length,
+      contentPreview: textPreview(content),
+    })
     throw new AppError(502, '称呼生成失败', 'KINSHIP_LABEL_GENERATION_FAILED')
   }
   return labels

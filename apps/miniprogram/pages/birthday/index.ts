@@ -2,8 +2,8 @@ import {
   familyMembers, getTodayBirthdays, getDaysUntilBirthday, getNextBirthdayDate
 } from '../../utils/familyData'
 import { generateAndCopyBirthdayWish } from '../../utils/birthdayWish'
-import { ensureFamilyData } from '../../services/familyStore'
-import { getBirthdaySubscriptionConfig } from '../../services/api'
+import { ensureFamilyData, invalidateFamilyData, refreshFamilyKinshipLabels } from '../../services/familyStore'
+import { getBirthdaySubscriptionConfig, linkCurrentUser } from '../../services/api'
 import { requestBirthdaySubscription } from '../../utils/subscription'
 
 interface MonthSection {
@@ -28,6 +28,8 @@ interface MemberRow {
   calendarLabel: string
   avatarText: string
   canEdit: boolean
+  isLinked: boolean
+  selfActionLabel: string
 }
 
 Component({
@@ -36,6 +38,7 @@ Component({
     filterType: 'all' as 'all' | 'lunar' | 'solar',
     todayMembers: [] as MemberRow[],
     monthSections: [] as MonthSection[],
+    noBirthdayMembers: [] as MemberRow[],
     familyId: '',
     activeRole: '',
     linkedMemberId: '',
@@ -44,6 +47,7 @@ Component({
     activeGrantCount: 0,
     subscriptionMode: 'once' as 'once' | 'long_term',
     subscribing: false,
+    refreshingKinship: false,
     showModal: false,
     selectedMemberJson: '',
   },
@@ -85,10 +89,13 @@ Component({
       const { keyword, filterType } = this.data
       const kw = keyword.trim().toLowerCase()
 
+      const matchesKeyword = (m: typeof familyMembers[0]) =>
+        !kw || m.name.toLowerCase().includes(kw) || m.relation.includes(kw)
+
       const filtered = familyMembers.filter(m => {
         if (!m.birthdayType || m.birthMonth === null || m.birthDay === null) return false
         if (filterType !== 'all' && m.birthdayType !== filterType) return false
-        if (kw && !m.name.toLowerCase().includes(kw) && !m.relation.includes(kw)) return false
+        if (!matchesKeyword(m)) return false
         return true
       })
 
@@ -115,16 +122,26 @@ Component({
           calendarLabel: m.birthdayType === 'lunar' ? (m.isLeapMonth ? '农历闰月' : '农历') : '阳历',
           avatarText: m.name.slice(-1),
           canEdit: activeRole === 'owner' || linkedMemberId === m.id,
+          isLinked: linkedMemberId === m.id,
+          selfActionLabel: linkedMemberId === m.id
+            ? '我'
+            : (activeRole === 'owner' || activeRole === 'admin' ? '设为我' : '申请认领'),
         }
       }
 
       const todayMembers = today
         .filter(m => {
           if (filterType !== 'all' && m.birthdayType !== filterType) return false
-          if (kw && !m.name.toLowerCase().includes(kw)) return false
+          if (!matchesKeyword(m)) return false
           return true
         })
         .map(toRow)
+
+      const noBirthdayMembers = filterType === 'all'
+        ? familyMembers
+          .filter(m => (!m.birthdayType || m.birthMonth === null || m.birthDay === null) && matchesKeyword(m))
+          .map(toRow)
+        : []
 
       // 按下一次生日的公历月份分组，确保农历生日也按真实先后顺序展示。
       const now = new Date()
@@ -151,7 +168,7 @@ Component({
             .map(toRow),
         }))
 
-      this.setData({ todayMembers, monthSections: sections })
+      this.setData({ todayMembers, monthSections: sections, noBirthdayMembers })
       } catch (error) {
         wx.showToast({ title: error instanceof Error ? error.message : '加载失败', icon: 'none' })
       }
@@ -186,6 +203,43 @@ Component({
       if (canEdit !== true && canEdit !== 'true') return
       wx.setStorageSync('little-family:editing-member', json)
       wx.navigateTo({ url: '/pages/member-edit/index' })
+    },
+
+    async setAsMe(e: WechatMiniprogram.TouchEvent) {
+      const { id, linked } = e.currentTarget.dataset as { id: string; linked: boolean | string }
+      if (linked === true || linked === 'true' || !this.data.familyId) return
+      try {
+        const result = await linkCurrentUser(this.data.familyId, id)
+        invalidateFamilyData()
+        await this.buildList()
+        wx.showToast({
+          title: result.status === 'pending' ? '已提交审批' : '已设为我',
+          icon: 'success',
+        })
+      } catch (error) {
+        wx.showToast({ title: error instanceof Error ? error.message : '设置失败', icon: 'none' })
+      }
+    },
+
+    async refreshKinshipLabels() {
+      if (!this.data.familyId || this.data.refreshingKinship) return
+      if (!this.data.linkedMemberId) {
+        wx.showToast({ title: '请先把成员设为我', icon: 'none' })
+        return
+      }
+      this.setData({ refreshingKinship: true })
+      wx.showLoading({ title: '刷新称呼中' })
+      try {
+        await refreshFamilyKinshipLabels()
+        await this.buildList()
+        wx.hideLoading()
+        wx.showToast({ title: '称呼已刷新', icon: 'success' })
+      } catch (error) {
+        wx.hideLoading()
+        wx.showToast({ title: error instanceof Error ? error.message : '刷新失败', icon: 'none' })
+      } finally {
+        this.setData({ refreshingKinship: false })
+      }
     },
 
     async generateWish(e: WechatMiniprogram.TouchEvent) {

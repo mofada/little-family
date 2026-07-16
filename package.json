@@ -8,6 +8,11 @@
     "apps/web",
     "packages/*"
   ],
+  "pnpm": {
+    "overrides": {
+      "vite": "6.3.5"
+    }
+  },
   "scripts": {
     "dev:api": "npm run dev --workspace @little-family/api",
     "dev:web": "npm run dev --workspace @little-family/web",
@@ -21,6 +26,7 @@
     "test:api": "npm run test --workspace @little-family/api",
     "test": "npm run test:api",
     "import:family": "node scripts/import-family-data.mjs",
+    "clear:kinship-labels": "node scripts/clear-kinship-labels.mjs",
     "icons:generate": "node scripts/generate-tabbar-icons.js && node scripts/convert-tabbar-svg-to-png.js"
   },
   "devDependencies": {
