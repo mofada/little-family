@@ -45,7 +45,11 @@ const birthdayFamilyIds = (clock: BeijingClock): string[] => {
   return rows.map(row => row.family_id)
 }
 
-const familySubscribers = (familyId: string): SubscriberRow[] => db.prepare(`
+const familySubscribers = (
+  familyId: string,
+  localDate: string,
+  includeDelivered: boolean,
+): SubscriberRow[] => db.prepare(`
   SELECT DISTINCT
     grants.user_id,
     COALESCE(
@@ -66,6 +70,15 @@ const familySubscribers = (familyId: string): SubscriberRow[] => db.prepare(`
   WHERE grants.family_id = ?
     AND grants.status = 'active'
     AND grants.template_id = ?
+    AND (
+      ? = 1
+      OR NOT EXISTS (
+        SELECT 1 FROM birthday_reminder_deliveries AS deliveries
+        WHERE deliveries.family_id = grants.family_id
+          AND deliveries.user_id = grants.user_id
+          AND deliveries.local_date = ?
+      )
+    )
     AND COALESCE(
       (
         SELECT identities.openid
@@ -77,11 +90,17 @@ const familySubscribers = (familyId: string): SubscriberRow[] => db.prepare(`
       ),
       CASE WHEN users.openid NOT LIKE 'website:%' THEN users.openid END
     ) IS NOT NULL
-`).all(familyId, BIRTHDAY_TEMPLATE.id) as unknown as SubscriberRow[]
+`).all(
+  familyId,
+  BIRTHDAY_TEMPLATE.id,
+  includeDelivered ? 1 : 0,
+  localDate,
+) as unknown as SubscriberRow[]
 
 export const runBirthdayReminderJob = async (
   date = new Date(),
   targetFamilyId?: string,
+  force = false,
 ): Promise<number> => {
   if (!config.wechatAppId || !config.wechatAppSecret) return 0
   const clock = getBeijingClock(date)
@@ -93,7 +112,7 @@ export const runBirthdayReminderJob = async (
   for (const familyId of familyIds) {
     const names = birthdayNames(familyId, clock)
     const memberNames = names.join('、').slice(0, 20)
-    const subscribers = familySubscribers(familyId)
+    const subscribers = familySubscribers(familyId, clock.localDate, force)
     if (subscribers.length === 0) continue
     console.log('Birthday reminder recipients resolved', {
       familyId,
@@ -103,13 +122,38 @@ export const runBirthdayReminderJob = async (
       userIds: subscribers.map(subscriber => subscriber.user_id),
     })
     for (const subscriber of subscribers) {
-      const deliveryId = randomUUID()
-      const inserted = db.prepare(`
-        INSERT OR IGNORE INTO birthday_reminder_deliveries
-          (id, family_id, user_id, local_date, member_names, status, created_at)
-        VALUES (?, ?, ?, ?, ?, 'pending', ?)
-      `).run(deliveryId, familyId, subscriber.user_id, clock.localDate, memberNames, new Date().toISOString())
-      if (Number(inserted.changes) === 0) continue
+      const createdAt = new Date().toISOString()
+      let deliveryId: string = randomUUID()
+      if (force) {
+        const existing = db.prepare(`
+          SELECT id FROM birthday_reminder_deliveries
+          WHERE family_id = ? AND user_id = ? AND local_date = ?
+        `).get(familyId, subscriber.user_id, clock.localDate) as { id: string } | undefined
+        if (existing) {
+          deliveryId = existing.id
+          const reset = db.prepare(`
+            UPDATE birthday_reminder_deliveries
+            SET member_names = ?, status = 'pending', error_message = NULL,
+                created_at = ?, sent_at = NULL
+            WHERE id = ? AND status <> 'pending'
+          `).run(memberNames, createdAt, deliveryId)
+          if (Number(reset.changes) === 0) continue
+        } else {
+          const inserted = db.prepare(`
+            INSERT OR IGNORE INTO birthday_reminder_deliveries
+              (id, family_id, user_id, local_date, member_names, status, created_at)
+            VALUES (?, ?, ?, ?, ?, 'pending', ?)
+          `).run(deliveryId, familyId, subscriber.user_id, clock.localDate, memberNames, createdAt)
+          if (Number(inserted.changes) === 0) continue
+        }
+      } else {
+        const inserted = db.prepare(`
+          INSERT OR IGNORE INTO birthday_reminder_deliveries
+            (id, family_id, user_id, local_date, member_names, status, created_at)
+          VALUES (?, ?, ?, ?, ?, 'pending', ?)
+        `).run(deliveryId, familyId, subscriber.user_id, clock.localDate, memberNames, createdAt)
+        if (Number(inserted.changes) === 0) continue
+      }
 
       const grant = db.prepare(`
         SELECT id FROM birthday_subscription_grants

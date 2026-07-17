@@ -100,7 +100,7 @@ curl -X POST 'https://你的API域名/api/families/<家庭ID>/birthday-reminders
   -H 'Authorization: Bearer <登录令牌>'
 ```
 
-接口返回 `familyId`、北京时间日期 `localDate` 和成功发送数 `sentCount`。测试接口直接调用 `runBirthdayReminderJob`，使用与定时任务相同的生日查询、订阅者查询、去重和授权消耗逻辑；因此当天已经处理过的用户不会重复发送。接口每分钟最多调用三次，并且只允许家庭所有者调用。
+接口返回 `familyId`、北京时间日期 `localDate`、`forced` 和成功发送数 `sentCount`。测试接口直接调用 `runBirthdayReminderJob` 的强制测试模式，使用与定时任务相同的生日查询、订阅者查询和授权消耗逻辑，但允许使用当前有效授权对当天已经处理过的用户再次测试。接口每分钟最多调用三次，并且只允许家庭所有者调用。每次成功测试都会真实消耗一条微信一次性订阅授权；没有有效授权时仍会返回 `sentCount: 0`。
 
 生日当天，小程序可以通过服务端调用 DeepSeek 生成生日祝福并复制。服务端需配置 `DEEPSEEK_API_KEY`，可用 `DEEPSEEK_MODEL` 指定模型（默认 `deepseek-v4-flash`）；未配置或生成失败时，小程序会自动改为复制原始祝福提示词。API Key 不得写入小程序源码。
 

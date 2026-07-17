@@ -862,11 +862,12 @@ app.post(
       throw new AppError(503, '生日提醒服务尚未启用', 'BIRTHDAY_REMINDER_DISABLED')
     }
     const clock = getBeijingClock()
-    const sentCount = await runBirthdayReminderJob(new Date(), familyId)
+    const sentCount = await runBirthdayReminderJob(new Date(), familyId, true)
     audit(familyId, authUser.id, 'test_push', 'birthday_reminder', clock.localDate, { sentCount })
     response.json({
       familyId,
       localDate: clock.localDate,
+      forced: true,
       sentCount,
     })
   },
