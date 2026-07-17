@@ -8,11 +8,6 @@
     "apps/web",
     "packages/*"
   ],
-  "pnpm": {
-    "overrides": {
-      "vite": "6.3.5"
-    }
-  },
   "scripts": {
     "dev:api": "npm run dev --workspace @little-family/api",
     "dev:web": "npm run dev --workspace @little-family/web",

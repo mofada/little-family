@@ -2,7 +2,9 @@ packages:
   - apps/api
   - apps/web
   - packages/*
+overrides:
+  vite: 6.3.5
 allowBuilds:
-  '@tailwindcss/oxide': set this to true or false
-  esbuild: set this to true or false
-  sharp: set this to true or false
+  '@tailwindcss/oxide': true
+  esbuild: true
+  sharp: true

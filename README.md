@@ -93,6 +93,15 @@ API 默认地址为 `http://127.0.0.1:3000`，健康检查为 `/health`。
 
 当前生日模板固定在 `apps/api/src/birthdayTemplate.ts`：模板 ID `4Hd2RmOKkWxhOzvP_ZTIKYaCiCorerofM0yPpydIdRg`，称呼 `name1`，生日日期 `thing6`，温馨提示 `thing5`。服务端配置微信 AppID/AppSecret 后自动启用。
 
+家庭所有者可以调用测试接口手动执行当前家庭的完整生日推送任务：
+
+```bash
+curl -X POST 'https://你的API域名/api/families/<家庭ID>/birthday-reminders/test' \
+  -H 'Authorization: Bearer <登录令牌>'
+```
+
+接口返回 `familyId`、北京时间日期 `localDate` 和成功发送数 `sentCount`。测试接口直接调用 `runBirthdayReminderJob`，使用与定时任务相同的生日查询、订阅者查询、去重和授权消耗逻辑；因此当天已经处理过的用户不会重复发送。接口每分钟最多调用三次，并且只允许家庭所有者调用。
+
 生日当天，小程序可以通过服务端调用 DeepSeek 生成生日祝福并复制。服务端需配置 `DEEPSEEK_API_KEY`，可用 `DEEPSEEK_MODEL` 指定模型（默认 `deepseek-v4-flash`）；未配置或生成失败时，小程序会自动改为复制原始祝福提示词。API Key 不得写入小程序源码。
 
 成员称呼不再手动录入。API 会按“当前登录用户关联的成员 → 目标成员”的视角读取 `kinship_labels` 缓存；普通成员列表、生日页和快照查询不会在缓存缺失时自动调用 DeepSeek。小程序生日管理页提供“刷新称呼”按钮，用户显式点击后才会为当前账号关联成员重新生成全量称呼并回填数据库。称呼生成失败或 DeepSeek 未配置时，API 只显示旧数据备用称呼或“亲人”，不再使用本地亲缘规则推断。成员或关系变更后会清空该家庭称呼缓存，需手动刷新重新生成。

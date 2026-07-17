@@ -6,9 +6,12 @@ import { getBeijingClock, type BeijingClock } from './birthdayClock'
 import { BIRTHDAY_TEMPLATE } from './birthdayTemplate'
 
 interface SubscriberRow {
-  family_id: string
   user_id: string
   openid: string
+}
+
+interface BirthdayFamilyRow {
+  family_id: string
 }
 
 const birthdayNames = (familyId: string, clock: BeijingClock): string[] => {
@@ -28,64 +31,136 @@ const birthdayNames = (familyId: string, clock: BeijingClock): string[] => {
   return rows.map(row => row.name)
 }
 
-export const runBirthdayReminderJob = async (date = new Date()): Promise<number> => {
+const birthdayFamilyIds = (clock: BeijingClock): string[] => {
+  const rows = db.prepare(`
+    SELECT DISTINCT family_id FROM members
+    WHERE
+      (birthday_type = 'solar' AND birth_month = ? AND birth_day = ?)
+      OR
+      (birthday_type = 'lunar' AND birth_month = ? AND birth_day = ? AND is_leap_month = ?)
+  `).all(
+    clock.month, clock.day,
+    clock.lunarMonth, clock.lunarDay, clock.lunarLeap ? 1 : 0,
+  ) as unknown as BirthdayFamilyRow[]
+  return rows.map(row => row.family_id)
+}
+
+const familySubscribers = (familyId: string): SubscriberRow[] => db.prepare(`
+  SELECT DISTINCT
+    grants.user_id,
+    COALESCE(
+      (
+        SELECT identities.openid
+        FROM wechat_identities AS identities
+        WHERE identities.user_id = grants.user_id
+          AND identities.provider = 'miniprogram'
+        ORDER BY identities.updated_at DESC
+        LIMIT 1
+      ),
+      CASE WHEN users.openid NOT LIKE 'website:%' THEN users.openid END
+    ) AS openid
+  FROM birthday_subscription_grants AS grants
+  JOIN users ON users.id = grants.user_id
+  JOIN family_users AS memberships
+    ON memberships.family_id = grants.family_id AND memberships.user_id = grants.user_id
+  WHERE grants.family_id = ?
+    AND grants.status = 'active'
+    AND grants.template_id = ?
+    AND COALESCE(
+      (
+        SELECT identities.openid
+        FROM wechat_identities AS identities
+        WHERE identities.user_id = grants.user_id
+          AND identities.provider = 'miniprogram'
+        ORDER BY identities.updated_at DESC
+        LIMIT 1
+      ),
+      CASE WHEN users.openid NOT LIKE 'website:%' THEN users.openid END
+    ) IS NOT NULL
+`).all(familyId, BIRTHDAY_TEMPLATE.id) as unknown as SubscriberRow[]
+
+export const runBirthdayReminderJob = async (
+  date = new Date(),
+  targetFamilyId?: string,
+): Promise<number> => {
   if (!config.wechatAppId || !config.wechatAppSecret) return 0
   const clock = getBeijingClock(date)
-  const subscribers = db.prepare(`
-    SELECT DISTINCT grants.family_id, grants.user_id, users.openid
-    FROM birthday_subscription_grants AS grants
-    JOIN users ON users.id = grants.user_id
-    WHERE grants.status = 'active' AND grants.template_id = ?
-  `).all(BIRTHDAY_TEMPLATE.id) as unknown as SubscriberRow[]
 
   let sentCount = 0
-  for (const subscriber of subscribers) {
-    const names = birthdayNames(subscriber.family_id, clock)
-    if (names.length === 0) continue
+  const familyIds = targetFamilyId
+    ? birthdayFamilyIds(clock).filter(familyId => familyId === targetFamilyId)
+    : birthdayFamilyIds(clock)
+  for (const familyId of familyIds) {
+    const names = birthdayNames(familyId, clock)
     const memberNames = names.join('、').slice(0, 20)
-    const deliveryId = randomUUID()
-    const inserted = db.prepare(`
-      INSERT OR IGNORE INTO birthday_reminder_deliveries
-        (id, family_id, user_id, local_date, member_names, status, created_at)
-      VALUES (?, ?, ?, ?, ?, 'pending', ?)
-    `).run(deliveryId, subscriber.family_id, subscriber.user_id, clock.localDate, memberNames, new Date().toISOString())
-    if (Number(inserted.changes) === 0) continue
+    const subscribers = familySubscribers(familyId)
+    if (subscribers.length === 0) continue
+    console.log('Birthday reminder recipients resolved', {
+      familyId,
+      localDate: clock.localDate,
+      memberNames,
+      subscriberCount: subscribers.length,
+      userIds: subscribers.map(subscriber => subscriber.user_id),
+    })
+    for (const subscriber of subscribers) {
+      const deliveryId = randomUUID()
+      const inserted = db.prepare(`
+        INSERT OR IGNORE INTO birthday_reminder_deliveries
+          (id, family_id, user_id, local_date, member_names, status, created_at)
+        VALUES (?, ?, ?, ?, ?, 'pending', ?)
+      `).run(deliveryId, familyId, subscriber.user_id, clock.localDate, memberNames, new Date().toISOString())
+      if (Number(inserted.changes) === 0) continue
 
-    const grant = db.prepare(`
-      SELECT id FROM birthday_subscription_grants
-      WHERE family_id = ? AND user_id = ? AND template_id = ? AND status = 'active'
-      ORDER BY granted_at LIMIT 1
-    `).get(subscriber.family_id, subscriber.user_id, BIRTHDAY_TEMPLATE.id) as { id: string } | undefined
-    if (!grant) {
-      db.prepare('DELETE FROM birthday_reminder_deliveries WHERE id = ?').run(deliveryId)
-      continue
-    }
-
-    try {
-      const result = await sendBirthdaySubscribeMessage(subscriber.openid, memberNames, clock.dateLabel)
-      if (result.errcode !== 0) {
-        transaction(() => {
-          db.prepare("UPDATE birthday_reminder_deliveries SET status = 'failed', error_message = ? WHERE id = ?")
-            .run(`${result.errcode}: ${result.errmsg}`, deliveryId)
-          db.prepare("UPDATE birthday_subscription_grants SET status = 'failed', consumed_at = ? WHERE id = ?")
-            .run(new Date().toISOString(), grant.id)
-        })
+      const grant = db.prepare(`
+        SELECT id FROM birthday_subscription_grants
+        WHERE family_id = ? AND user_id = ? AND template_id = ? AND status = 'active'
+        ORDER BY granted_at LIMIT 1
+      `).get(familyId, subscriber.user_id, BIRTHDAY_TEMPLATE.id) as { id: string } | undefined
+      if (!grant) {
+        db.prepare('DELETE FROM birthday_reminder_deliveries WHERE id = ?').run(deliveryId)
         continue
       }
-      transaction(() => {
-        const timestamp = new Date().toISOString()
-        db.prepare("UPDATE birthday_reminder_deliveries SET status = 'sent', sent_at = ? WHERE id = ?")
-          .run(timestamp, deliveryId)
-        if (BIRTHDAY_TEMPLATE.subscriptionMode === 'once') {
-          db.prepare("UPDATE birthday_subscription_grants SET status = 'consumed', consumed_at = ? WHERE id = ?")
-            .run(timestamp, grant.id)
+
+      try {
+        const result = await sendBirthdaySubscribeMessage(subscriber.openid, memberNames, clock.dateLabel)
+        if (result.errcode !== 0) {
+          console.error('Birthday reminder rejected by WeChat', {
+            familyId,
+            userId: subscriber.user_id,
+            errcode: result.errcode,
+            errmsg: result.errmsg,
+          })
+          transaction(() => {
+            db.prepare("UPDATE birthday_reminder_deliveries SET status = 'failed', error_message = ? WHERE id = ?")
+              .run(`${result.errcode}: ${result.errmsg}`, deliveryId)
+            db.prepare("UPDATE birthday_subscription_grants SET status = 'failed', consumed_at = ? WHERE id = ?")
+              .run(new Date().toISOString(), grant.id)
+          })
+          continue
         }
-      })
-      sentCount += 1
-    } catch (error) {
-      // 网络级错误不消耗授权，删除占位以便下一分钟重试。
-      db.prepare('DELETE FROM birthday_reminder_deliveries WHERE id = ?').run(deliveryId)
-      console.error('Birthday reminder delivery failed', error)
+        transaction(() => {
+          const timestamp = new Date().toISOString()
+          db.prepare("UPDATE birthday_reminder_deliveries SET status = 'sent', sent_at = ? WHERE id = ?")
+            .run(timestamp, deliveryId)
+          if (BIRTHDAY_TEMPLATE.subscriptionMode === 'once') {
+            db.prepare("UPDATE birthday_subscription_grants SET status = 'consumed', consumed_at = ? WHERE id = ?")
+              .run(timestamp, grant.id)
+          }
+        })
+        sentCount += 1
+        console.log('Birthday reminder sent', {
+          familyId,
+          userId: subscriber.user_id,
+        })
+      } catch (error) {
+        // 网络级错误不消耗授权，删除占位以便下一分钟重试。
+        db.prepare('DELETE FROM birthday_reminder_deliveries WHERE id = ?').run(deliveryId)
+        console.error('Birthday reminder delivery failed', {
+          familyId,
+          userId: subscriber.user_id,
+          error,
+        })
+      }
     }
   }
   return sentCount
@@ -103,7 +178,11 @@ export const startBirthdayReminderScheduler = (): void => {
     running = true
     try {
       const sent = await runBirthdayReminderJob()
-      console.log(`Birthday reminder job completed: ${sent} message(s) sent`)
+      if (sent > 0) {
+        console.log(`Birthday reminder job completed: ${sent} message(s) sent`)
+      }
+    } catch (error) {
+      console.error('Birthday reminder job failed', error)
     } finally {
       running = false
     }

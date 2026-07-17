@@ -76,6 +76,23 @@ const callDeepSeek = async (
   timeoutMs = 15_000,
   jsonResponse = false,
 ): Promise<string> => {
+  const requestBody = {
+    model: config.deepseekModel,
+    messages: [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userPrompt },
+    ],
+    max_tokens: maxTokens,
+    stream: false,
+    thinking: { type: 'disabled' },
+    ...(jsonResponse ? { response_format: { type: 'json_object' } } : {}),
+  }
+  logDeepSeekInfo('request', {
+    code: errorCode,
+    timeoutMs,
+    body: requestBody,
+  })
+
   let response: globalThis.Response
   try {
     response = await fetch('https://api.deepseek.com/chat/completions', {
@@ -84,17 +101,7 @@ const callDeepSeek = async (
         Authorization: `Bearer ${config.deepseekApiKey}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        model: config.deepseekModel,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt },
-        ],
-        max_tokens: maxTokens,
-        stream: false,
-        thinking: { type: 'disabled' },
-        ...(jsonResponse ? { response_format: { type: 'json_object' } } : {}),
-      }),
+      body: JSON.stringify(requestBody),
       signal: AbortSignal.timeout(timeoutMs),
     })
   } catch (error) {
@@ -109,17 +116,17 @@ const callDeepSeek = async (
   }
 
   if (!response.ok) {
-    let bodyPreview = ''
+    let body = ''
     try {
-      bodyPreview = textPreview(await response.text())
+      body = await response.text()
     } catch (error) {
-      bodyPreview = `读取响应体失败：${describeError(error)}`
+      body = `读取响应体失败：${describeError(error)}`
     }
     logDeepSeekDiagnostic('http_error', {
       code: errorCode,
       status: response.status,
       statusText: response.statusText,
-      bodyPreview,
+      body,
       maxTokens,
       timeoutMs,
       jsonResponse,
@@ -140,6 +147,12 @@ const callDeepSeek = async (
     })
     throw new AppError(502, errorMessage, errorCode)
   }
+  logDeepSeekInfo('response', {
+    code: errorCode,
+    status: response.status,
+    statusText: response.statusText,
+    body: responseText,
+  })
 
   let result: DeepSeekResponse
   try {

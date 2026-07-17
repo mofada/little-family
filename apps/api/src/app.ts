@@ -15,6 +15,7 @@ import {
 import { AppError, type AuthenticatedRequest, type FamilyRole } from './types'
 import { BIRTHDAY_TEMPLATE } from './birthdayTemplate'
 import { getBeijingClock } from './birthdayClock'
+import { runBirthdayReminderJob } from './birthdayReminders'
 import { generateBirthdayWish, generateKinshipLabels } from './deepseek'
 
 const now = (): string => new Date().toISOString()
@@ -22,6 +23,13 @@ const now = (): string => new Date().toISOString()
 const birthdayWishRateLimit = rateLimit({
   windowMs: 60_000,
   limit: 10,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+})
+
+const birthdayReminderTestRateLimit = rateLimit({
+  windowMs: 60_000,
+  limit: 3,
   standardHeaders: 'draft-8',
   legacyHeaders: false,
 })
@@ -842,6 +850,27 @@ app.post('/api/families/:familyId/birthday-subscriptions', (request: Request, re
   audit(familyId, authUser.id, 'grant', 'birthday_subscription', grantId)
   response.status(201).json({ grantId })
 })
+
+app.post(
+  '/api/families/:familyId/birthday-reminders/test',
+  birthdayReminderTestRateLimit,
+  async (request: Request, response) => {
+    const { authUser } = request as AuthenticatedRequest
+    const familyId = routeParam(request, 'familyId')
+    requireFamilyRole(authUser.id, familyId, 'owner')
+    if (!config.wechatAppId || !config.wechatAppSecret) {
+      throw new AppError(503, '生日提醒服务尚未启用', 'BIRTHDAY_REMINDER_DISABLED')
+    }
+    const clock = getBeijingClock()
+    const sentCount = await runBirthdayReminderJob(new Date(), familyId)
+    audit(familyId, authUser.id, 'test_push', 'birthday_reminder', clock.localDate, { sentCount })
+    response.json({
+      familyId,
+      localDate: clock.localDate,
+      sentCount,
+    })
+  },
+)
 
 app.post('/api/families/:familyId/members/:memberId/birthday-wish', birthdayWishRateLimit, async (request: Request, response) => {
   const { authUser } = request as AuthenticatedRequest
