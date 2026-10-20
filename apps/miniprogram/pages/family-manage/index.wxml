@@ -1,75 +1,164 @@
 <view class="page">
   <navigation-bar title="家庭管理" back="{{true}}" color="black" background="#f7f3ef" />
-  <scroll-view class="content" scroll-y>
-    <view wx:if="{{loading}}" class="card empty"><text>正在加载…</text></view>
-
-    <view class="card">
-      <text class="card-title">我的家庭</text>
-      <picker wx:if="{{families.length > 0}}" mode="selector" range="{{families}}" range-key="name" value="{{familyIndex}}" bindchange="onFamilyChange">
-        <view class="picker-value"><text>{{activeFamilyName}}</text><text>切换 ›</text></view>
-      </picker>
-      <view class="form-row">
-        <input class="input" placeholder="新家庭名称" value="{{newFamilyName}}" bindinput="onFamilyNameInput" maxlength="30" />
-        <view class="small-button primary" bindtap="createFamily" hover-class="action-pressed">创建</view>
+  <scroll-view class="page__list" scroll-y enhanced show-scrollbar="{{false}}">
+    <view class="sheet">
+      <view class="print-masthead">
+        <text class="print-masthead__name">家庭管理</text>
+        <text class="seal">家</text>
       </view>
-    </view>
 
-    <view class="card">
-      <text class="card-title">通过邀请码加入</text>
-      <view class="form-row">
-        <input class="input" placeholder="输入亲人发来的邀请码" value="{{joinCode}}" bindinput="onJoinCodeInput" />
-        <view class="small-button" bindtap="joinFamily" hover-class="action-pressed">加入</view>
-      </view>
-    </view>
+      <view class="print-rule"></view>
 
-    <view wx:if="{{activeFamilyId && canApproveLink && linkRequests.length > 0}}" class="card">
-      <text class="card-title">认领审批</text>
-      <view wx:for="{{linkRequests}}" wx:key="id" class="approval-row">
-        <view class="approval-info">
-          <text class="member-name">{{item.memberName}}</text>
-          <text class="sub">有家人申请将此成员设为自己</text>
+      <text wx:if="{{loading}}" class="loading">正在加载…</text>
+
+      <view class="section">
+        <text class="section__cap">当前家庭</text>
+        <picker
+          wx:if="{{families.length > 0}}"
+          mode="selector"
+          range="{{families}}"
+          range-key="name"
+          value="{{familyIndex}}"
+          bindchange="onFamilyChange"
+        >
+          <view class="picker-row">
+            <text class="picker-row__value">{{activeFamilyName}}</text>
+            <text class="picker-row__meta">切换 ›</text>
+          </view>
+        </picker>
+
+        <view class="form-row">
+          <view class="field">
+            <input
+              class="field__input"
+              placeholder="新家庭名称"
+              placeholder-class="field__placeholder"
+              value="{{newFamilyName}}"
+              bindinput="onFamilyNameInput"
+              maxlength="30"
+            />
+          </view>
+          <view class="print-action action--solid" bindtap="createFamily" hover-class="tap-pressed">创建</view>
         </view>
-        <view class="text-button" bindtap="decideLinkRequest" data-id="{{item.id}}" data-status="approved" hover-class="action-pressed">通过</view>
-        <view class="text-button danger" bindtap="decideLinkRequest" data-id="{{item.id}}" data-status="rejected" hover-class="action-pressed">拒绝</view>
       </view>
-    </view>
 
-    <view wx:if="{{activeFamilyId && canInvite}}" class="card">
-      <text class="card-title">邀请亲人</text>
-      <text class="sub">生成专属邀请后直接发给微信好友，亲人点开即可加入，无需复制邀请码。</text>
-      <view
-        wx:if="{{!inviteCode || inviteFamilyId !== activeFamilyId}}"
-        class="full-button"
-        bindtap="generateInvite"
-        hover-class="action-pressed"
-      >{{generatingInvite ? '正在生成…' : '生成微信邀请'}}</view>
-      <button
-        wx:else
-        class="full-button share-button"
-        open-type="share"
-        hover-class="action-pressed"
-      >发送给微信好友</button>
-      <view wx:if="{{inviteCode && inviteFamilyId === activeFamilyId}}" class="invite-ready">
-        <text class="invite-ready__icon">✓</text>
-        <view class="invite-ready__content">
-          <text class="invite-ready__title">专属邀请已生成</text>
-          <text class="sub">一次有效，72 小时内可使用</text>
+      <view class="print-rule"></view>
+
+      <view class="section">
+        <text class="section__cap">加入一个家庭</text>
+        <text class="section__desc">通过邀请码加入</text>
+        <view class="form-row">
+          <view class="field">
+            <input
+              class="field__input"
+              placeholder="输入亲人发来的邀请码"
+              placeholder-class="field__placeholder"
+              value="{{joinCode}}"
+              bindinput="onJoinCodeInput"
+            />
+          </view>
+          <view class="print-action" bindtap="joinFamily" hover-class="tap-pressed">加入</view>
         </view>
-        <view class="regenerate-button" bindtap="generateInvite">重新生成</view>
       </view>
-    </view>
 
-    <view class="card">
-      <text class="card-title">登录网页版</text>
-      <text class="sub">生成一次性登录码，在网页版输入即可同步查看你的家庭数据；登录码 5 分钟内有效。</text>
-      <view class="full-button" bindtap="generateWebLoginCode" hover-class="action-pressed">生成并复制网页登录码</view>
-      <text wx:if="{{webLoginCode}}" class="invite-code">{{webLoginCode}}</text>
-    </view>
+      <block wx:if="{{activeFamilyId && canApproveLink && linkRequests.length > 0}}">
+        <view class="print-rule"></view>
 
-    <view wx:if="{{activeFamilyId && activeRole && activeRole !== 'owner'}}" class="card">
-      <text class="card-title">退出家庭</text>
-      <text class="sub">退出后将无法继续查看这个家庭，除非再次通过邀请码加入。</text>
-      <view class="full-button muted" bindtap="leaveCurrentFamily" hover-class="action-pressed">退出当前家庭</view>
+        <view class="section">
+          <text class="section__cap">认领审批</text>
+          <view wx:for="{{linkRequests}}" wx:key="id" class="approval">
+            <view class="approval__main">
+              <text class="approval__name">{{item.memberName}}</text>
+              <text class="approval__meta">有家人申请将此成员设为自己</text>
+            </view>
+            <view class="approval__actions">
+              <view
+                class="print-action action--small print-action--primary"
+                bindtap="decideLinkRequest"
+                data-id="{{item.id}}"
+                data-status="approved"
+                hover-class="tap-pressed"
+              >通过</view>
+              <view
+                class="print-action action--small"
+                bindtap="decideLinkRequest"
+                data-id="{{item.id}}"
+                data-status="rejected"
+                hover-class="tap-pressed"
+              >拒绝</view>
+            </view>
+          </view>
+        </view>
+      </block>
+
+      <block wx:if="{{activeFamilyId && canInvite}}">
+        <view class="print-rule"></view>
+
+        <view class="section">
+          <text class="section__cap">邀请家人</text>
+          <text class="section__desc">发给微信好友即可加入 · 7 天内有效 · 最多 {{inviteMaxUses}} 人</text>
+
+          <view wx:if="{{recentJoins > 0}}" class="join-note">
+            <text>最近 7 天有 {{recentJoins}} 位家人加入{{lastJoinLabel ? ' · 最近一次 ' + lastJoinLabel : ''}}</text>
+          </view>
+
+          <block wx:if="{{inviteCode && inviteFamilyId === activeFamilyId}}">
+            <button
+              class="print-action print-action--wide print-action--primary share-action"
+              open-type="share"
+              hover-class="tap-pressed"
+            >发送给微信好友</button>
+
+            <view class="code-row">
+              <view class="code-row__main">
+                <text class="code-row__label">邀请码</text>
+                <text class="code-row__value">{{inviteCode}}</text>
+                <text class="code-row__meta">还可加入 {{inviteRemaining}} 人{{inviteExpiresLabel ? ' · ' + inviteExpiresLabel + '失效' : ''}}</text>
+              </view>
+              <view class="print-action action--small" bindtap="copyInviteCode" hover-class="tap-pressed">{{inviteCopied ? '已复制' : '复制'}}</view>
+            </view>
+
+            <view class="section__actions">
+              <view class="print-action action--small print-action--ghost" bindtap="regenerateInvite" hover-class="tap-pressed">换一个</view>
+              <view class="print-action action--small action--danger" bindtap="revokeCurrentInvite" hover-class="tap-pressed">作废</view>
+            </view>
+          </block>
+
+          <view wx:else class="print-action print-action--wide action--center" bindtap="generateInvite" hover-class="tap-pressed">
+            {{generatingInvite ? '正在生成…' : '生成邀请'}}
+          </view>
+
+          <view wx:if="{{inviteError}}" class="error-row">
+            <text class="error-row__text">{{inviteError}}</text>
+            <view class="print-action action--small" bindtap="generateInvite" hover-class="tap-pressed">重试</view>
+          </view>
+
+          <text class="footnote">对方也可以在小程序「家庭管理 → 加入一个家庭」里手动输入这串码；作废后旧链接立即失效。</text>
+        </view>
+      </block>
+
+      <view class="print-rule"></view>
+
+      <view class="section">
+        <text class="section__cap">登录网页版</text>
+        <text class="section__desc">生成一次性登录码，在网页版输入即可同步查看你的家庭数据；登录码 5 分钟内有效。</text>
+        <view class="print-action print-action--wide action--center" bindtap="generateWebLoginCode" hover-class="tap-pressed">生成并复制网页登录码</view>
+        <text wx:if="{{webLoginCode}}" class="code-row__value code-row__value--center">{{webLoginCode}}</text>
+      </view>
+
+      <block wx:if="{{activeFamilyId && activeRole && activeRole !== 'owner'}}">
+        <view class="print-rule"></view>
+
+        <view class="section">
+          <text class="section__cap">退出家庭</text>
+          <text class="section__desc">退出后将无法继续查看这个家庭，除非再次通过邀请码加入。</text>
+          <view class="print-action print-action--wide action--center" bindtap="leaveCurrentFamily" hover-class="tap-pressed">退出当前家庭</view>
+        </view>
+      </block>
+
+      <view class="print-rule"></view>
+
+      <view class="print-colophon"><text>小家记</text></view>
     </view>
   </scroll-view>
 </view>

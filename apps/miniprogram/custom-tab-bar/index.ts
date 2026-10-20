@@ -2,11 +2,11 @@ Component({
   data: {
     selected: 0,
     list: [
-      { pagePath: '/pages/home/index',     text: '首页',  icon: '🏠', activeIcon: '🏡' },
-      { pagePath: '/pages/tree/index',     text: '图谱',  icon: '🌳', activeIcon: '🌲' },
-      { pagePath: '/pages/timeline/index', text: '时间轴', icon: '🕰️', activeIcon: '⏳' },
-      { pagePath: '/pages/birthday/index', text: '生日',  icon: '🎂', activeIcon: '🎉' },
-      { pagePath: '/pages/profile/index',  text: '我的',  icon: '👤', activeIcon: '👨' },
+      { pagePath: '/pages/home/index',     text: '首页',  icon: '/assets/tabbar/home.png',     activeIcon: '/assets/tabbar/home-active.png' },
+      { pagePath: '/pages/tree/index',     text: '图谱',  icon: '/assets/tabbar/tree.png',     activeIcon: '/assets/tabbar/tree-active.png' },
+      { pagePath: '/pages/timeline/index', text: '时间轴', icon: '/assets/tabbar/timeline.png', activeIcon: '/assets/tabbar/timeline-active.png' },
+      { pagePath: '/pages/birthday/index', text: '生日',  icon: '/assets/tabbar/birthday.png', activeIcon: '/assets/tabbar/birthday-active.png' },
+      { pagePath: '/pages/profile/index',  text: '我的',  icon: '/assets/tabbar/profile.png',  activeIcon: '/assets/tabbar/profile-active.png' },
     ]
   },
   methods: {

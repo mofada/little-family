@@ -1,130 +1,113 @@
 <view class="page">
   <navigation-bar title="家庭时间轴" back="{{false}}" color="black" background="#f7f3ef" />
 
-  <view wx:if="{{!loading && !needsFamily}}" class="toolbar">
-    <view class="search-box">
-      <view class="search-icon">
-        <view class="search-icon__circle"></view>
-        <view class="search-icon__handle"></view>
-      </view>
-      <input
-        class="search-input"
-        placeholder="搜索姓名、关系或出生年份"
-        placeholder-class="search-placeholder"
-        value="{{keyword}}"
-        bindinput="onSearch"
-      />
-      <view wx:if="{{keyword}}" class="search-clear" bindtap="clearSearch">×</view>
-    </view>
-    <scroll-view class="filter-scroll" scroll-x enhanced show-scrollbar="{{false}}">
-      <view class="filter-row">
-        <view class="chip {{genderFilter === 'all' ? 'chip--active' : ''}}" bindtap="setGenderFilter" data-gender="all">全部</view>
-        <view class="chip {{genderFilter === 'male' ? 'chip--active' : ''}}" bindtap="setGenderFilter" data-gender="male">男性</view>
-        <view class="chip {{genderFilter === 'female' ? 'chip--active' : ''}}" bindtap="setGenderFilter" data-gender="female">女性</view>
-        <view class="chip {{genderFilter === 'unknown' ? 'chip--active' : ''}}" bindtap="setGenderFilter" data-gender="unknown">未记录</view>
-      </view>
-    </scroll-view>
-  </view>
-
   <scroll-view class="page__list" scroll-y type="list" enhanced show-scrollbar="{{false}}">
-    <view wx:if="{{loading}}" class="state-card">
-      <view class="state-card__icon state-card__icon--loading">⌛</view>
-      <text class="state-card__title">正在梳理家庭时光…</text>
-      <text class="state-card__desc">将成员按出生年份排列</text>
+    <view wx:if="{{loading}}" class="state">
+      <text class="state__title">正在梳理家庭时光…</text>
+      <text class="state__desc">将成员按出生年份排列</text>
     </view>
 
-    <view wx:elif="{{needsFamily}}" class="state-card">
-      <view class="state-card__icon">🏡</view>
-      <text class="state-card__title">还没有家庭资料</text>
-      <text class="state-card__desc">创建或加入家庭后，时间轴会自动生成</text>
-      <view class="state-card__button" bindtap="goFamilyManage">开始设置</view>
+    <view wx:elif="{{needsFamily}}" class="state">
+      <text class="state__title">还没有家庭资料</text>
+      <text class="state__desc">创建或加入家庭后，时间轴会自动生成</text>
+      <view class="print-action print-action--primary state__action" bindtap="goFamilyManage" hover-class="tap-pressed">开始设置</view>
     </view>
 
     <block wx:else>
-      <view class="hero">
-        <view class="hero__eyebrow">FAMILY STORY</view>
-        <view class="hero__heading">
-          <view>
-            <text class="hero__title">家庭时光长卷</text>
-            <text class="hero__subtitle" wx:if="{{firstYear !== null}}">{{firstYear}}—{{lastYear}} · 跨越 {{yearSpan}} 年</text>
-            <text class="hero__subtitle" wx:else>为成员补充出生年份，即可点亮时间轴</text>
-          </view>
-          <view class="hero__seal"><text>家</text></view>
+      <view class="sheet">
+        <view class="print-masthead">
+          <text class="print-masthead__name">时间轴</text>
+          <text class="seal">轴</text>
         </view>
-        <view class="hero__stats">
-          <view class="hero-stat">
-            <text class="hero-stat__value">{{totalMembers}}</text>
-            <text class="hero-stat__label">家庭成员</text>
-          </view>
-          <view class="hero-stat__divider"></view>
-          <view class="hero-stat">
-            <text class="hero-stat__value">{{totalEvents}}</text>
-            <text class="hero-stat__label">当前展示</text>
-          </view>
-          <view class="hero-stat__divider"></view>
-          <view class="hero-stat">
-            <text class="hero-stat__value">{{hiddenCount}}</text>
-            <text class="hero-stat__label">待补年份</text>
-          </view>
-        </view>
-      </view>
 
-      <view wx:if="{{decadeGroups.length === 0}}" class="state-card state-card--compact">
-        <view class="state-card__icon">📜</view>
-        <text class="state-card__title">{{keyword || genderFilter !== 'all' ? '没有找到匹配成员' : '时间轴还是空的'}}</text>
-        <text class="state-card__desc">{{keyword || genderFilter !== 'all' ? '试试其他关键词或筛选条件' : '在成员编辑中补充出生年份'}}</text>
-      </view>
+        <view class="print-rule"></view>
 
-      <view wx:else class="timeline">
-        <view wx:for="{{decadeGroups}}" wx:key="decade" class="decade-block">
-          <view class="decade-axis">
-            <view class="decade-axis__ring"><view class="decade-axis__dot"></view></view>
-            <view class="decade-axis__line"></view>
-          </view>
-          <view class="decade-content">
-            <view class="decade-header">
-              <text class="decade-label">{{item.decadeLabel}}</text>
-              <text class="decade-count">{{item.count}} 位成员</text>
+        <view class="toolbar">
+          <view class="search-box">
+            <view class="search-icon">
+              <view class="search-icon__circle"></view>
+              <view class="search-icon__handle"></view>
             </view>
-            <view class="event-list">
-              <view
-                wx:for="{{item.events}}"
-                wx:for-item="event"
-                wx:key="id"
-                class="event-card"
-                hover-class="event-card--pressed"
-                bindtap="onEventTap"
-                data-json="{{event.memberJson}}"
-              >
-                <view class="event-year">
-                  <text class="event-year__number">{{event.birthYear}}</text>
-                  <text class="event-year__unit">年</text>
-                </view>
-                <view class="event-avatar" style="background: {{event.color}}18; color: {{event.color}}; border-color: {{event.color}}35;">
-                  <text>{{event.avatarText}}</text>
-                </view>
-                <view class="event-main">
-                  <view class="event-name-row">
-                    <text class="event-name">{{event.name}}</text>
-                    <text class="event-relation">{{event.relation}}</text>
+            <input
+              class="search-input"
+              placeholder="搜索姓名、关系或出生年份"
+              placeholder-class="search-placeholder"
+              value="{{keyword}}"
+              bindinput="onSearch"
+            />
+            <view wx:if="{{keyword}}" class="search-clear" bindtap="clearSearch" hover-class="tap-pressed">×</view>
+          </view>
+          <scroll-view class="filter-scroll" scroll-x enhanced show-scrollbar="{{false}}">
+            <view class="filter-row">
+              <view class="chip {{filter === 'all' ? 'chip--active' : ''}}" bindtap="setFilter" data-filter="all" hover-class="tap-pressed">全部</view>
+              <view class="chip {{filter === 'missing' ? 'chip--active' : ''}}" bindtap="setFilter" data-filter="missing" hover-class="tap-pressed">待补年份</view>
+            </view>
+          </scroll-view>
+        </view>
+
+        <view class="print-rule--tight"></view>
+
+        <view wx:if="{{hiddenCount > 0 && filter !== 'missing'}}" class="notice">
+          <view class="notice__main">
+            <text class="notice__label">还有 {{hiddenCount}} 位家人缺出生年份</text>
+            <text class="notice__detail">补上之后，他们才会排进时间轴</text>
+          </view>
+          <view class="print-action" bindtap="showMissing" hover-class="tap-pressed">只看这 {{hiddenCount}} 位</view>
+        </view>
+
+        <text wx:if="{{summaryLabel}}" class="summary">{{summaryLabel}}</text>
+
+        <view wx:if="{{groups.length === 0}}" class="state state--inline">
+          <text class="state__title">{{emptyTitle}}</text>
+          <text class="state__desc">{{emptyDesc}}</text>
+        </view>
+
+        <view wx:else class="timeline">
+          <view wx:for="{{groups}}" wx:key="id" class="decade-block">
+            <view class="decade-axis">
+              <view class="decade-axis__ring"><view class="decade-axis__dot"></view></view>
+              <view class="decade-axis__line"></view>
+            </view>
+            <view class="decade-content">
+              <view class="decade-header">
+                <text class="decade-label">{{item.label}}</text>
+                <text class="decade-count">{{item.count}} 位成员</text>
+              </view>
+              <view class="event-list">
+                <view
+                  wx:for="{{item.events}}"
+                  wx:for-item="event"
+                  wx:key="id"
+                  class="event print-entry"
+                  hover-class="row--pressed"
+                  bindtap="onEventTap"
+                  data-json="{{event.memberJson}}"
+                >
+                  <view class="event-year">
+                    <text class="print-entry__num">{{event.yearLabel}}</text>
+                    <text wx:if="{{event.yearUnit}}" class="event-year__unit">{{event.yearUnit}}</text>
                   </view>
-                  <text class="event-birthday">{{event.birthdayLabel}}</text>
-                  <view class="event-tags">
-                    <text class="event-tag">{{event.ageLabel}}</text>
-                    <text class="event-tag">{{event.genderLabel}}</text>
+                  <view class="event-main">
+                    <view class="event-name-row">
+                      <text class="event-name">{{event.name}}</text>
+                      <text class="event-relation">{{event.relation}}</text>
+                    </view>
+                    <text class="event-birthday">{{event.birthdayLabel}}</text>
+                    <view class="event-tags">
+                      <text class="event-tag">{{event.ageLabel}}</text>
+                      <text class="event-tag">{{event.genderLabel}}</text>
+                    </view>
                   </view>
+                  <view class="event-chevron"></view>
                 </view>
-                <text class="event-arrow">›</text>
               </view>
             </view>
           </view>
         </view>
-      </view>
 
-      <view wx:if="{{decadeGroups.length > 0}}" class="list-footer">
-        <view class="list-footer__line"></view>
-        <text>每一个年份，都是家庭故事的一页</text>
-        <view class="list-footer__line"></view>
+        <view wx:if="{{familyName}}" class="print-colophon">
+          <text>{{familyName}} · {{memberCount}} 位家人 · 第 {{dayOfYear}} 天</text>
+        </view>
       </view>
     </block>
   </scroll-view>

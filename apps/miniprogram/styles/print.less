@@ -1,0 +1,127 @@
+// 印刷版式公共件：与首页一致的字体、墨色、细线与方角按钮。
+// 用法：@import "../styles/print"; 然后 .serif(); 或直接用 .print-* 类。
+
+@serif: "Songti SC", "STSong", "Noto Serif SC", "Source Han Serif SC", "Noto Serif CJK SC", serif;
+@ink: #3d2f2a;
+@ink-soft: #6b5751;
+@ink-faint: #a99c96;
+@vermilion: #b5564c;
+@vermilion-deep: #9c433b;
+@paper: #f7f3ef;
+@rule: #ddd0c7;
+
+.serif() {
+  font-family: @serif;
+}
+
+/* 双细线：印刷页的分段方式，替代卡片阴影 */
+.print-rule {
+  height: 12rpx;
+  border-top: 1rpx solid @rule;
+  border-bottom: 1rpx solid @rule;
+}
+
+.print-rule--tight {
+  height: 8rpx;
+  border-top: 1rpx solid @rule;
+  border-bottom: 1rpx solid @rule;
+}
+
+/* 报头：页面名 + 朱印 */
+.print-masthead {
+  display: flex;
+  align-items: center;
+  gap: 14rpx;
+  padding: 30rpx 0 20rpx;
+}
+
+.print-masthead__name {
+  .serif();
+  font-size: 32rpx;
+  font-weight: 600;
+  letter-spacing: 6rpx;
+  color: @ink;
+}
+
+.seal {
+  width: 48rpx;
+  height: 48rpx;
+  line-height: 48rpx;
+  text-align: center;
+  border-radius: 4rpx;
+  background: @vermilion;
+  color: #fff;
+  .serif();
+  font-size: 24rpx;
+  letter-spacing: 0;
+}
+
+/* 方角描边按钮：印刷页的动作都用它 */
+.print-action {
+  flex: none;
+  min-width: 96rpx;
+  height: 56rpx;
+  padding: 0 14rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2rpx solid @ink-faint;
+  border-radius: 8rpx;
+  font-size: 24rpx;
+  letter-spacing: 1rpx;
+  color: @ink;
+}
+
+.print-action--primary {
+  border-color: @vermilion;
+  color: @vermilion;
+}
+
+.print-action--ghost {
+  border-color: @rule;
+  color: @ink-soft;
+}
+
+.print-action--wide {
+  width: 100%;
+  height: 64rpx;
+  box-sizing: border-box;
+  justify-content: space-between;
+  padding: 0 18rpx;
+  margin-top: 20rpx;
+}
+
+/* 页脚版权行 */
+.print-colophon {
+  margin-top: auto;
+  padding: 56rpx 0 16rpx;
+  text-align: center;
+}
+
+.print-colophon text {
+  .serif();
+  font-size: 19rpx;
+  letter-spacing: 3rpx;
+  color: @ink-faint;
+}
+
+/* 账页行：左数字 / 中信息 / 右标记 */
+.print-entry {
+  display: flex;
+  align-items: center;
+  gap: 24rpx;
+  padding: 22rpx 0;
+  border-bottom: 1rpx solid @rule;
+}
+
+.print-entry:last-child {
+  border-bottom: 0;
+}
+
+.print-entry__num {
+  .serif();
+  font-size: 44rpx;
+  font-weight: 600;
+  line-height: 1;
+  color: @ink;
+}

@@ -1,78 +1,153 @@
 <view class="page">
   <navigation-bar title="{{title}}" back="{{true}}" color="black" background="#f7f3ef" />
-  <scroll-view class="content" scroll-y>
-    <view class="card">
-      <text class="section-title">基本资料</text>
-      <text class="label">姓名 *</text>
-      <input class="input" value="{{form.name}}" data-field="name" bindinput="setText" maxlength="30" placeholder="请输入姓名" />
-      <text class="label">昵称</text>
-      <input class="input" value="{{form.nickName}}" data-field="nickName" bindinput="setText" maxlength="30" placeholder="可不填" />
-      <view class="field"><text class="label">性别</text><picker mode="selector" range="{{genderOptions}}" value="{{genderIndex}}" bindchange="onGenderChange"><view class="picker">{{genderOptions[genderIndex]}} ›</view></picker></view>
-    </view>
+  <scroll-view class="page__list" scroll-y enhanced show-scrollbar="{{false}}">
+    <view class="sheet">
+      <view class="print-masthead">
+        <text class="print-masthead__name">成员资料</text>
+        <text class="seal">录</text>
+      </view>
 
-    <view class="card">
-      <text class="section-title">生日</text>
-      <view class="switch-row"><text class="label">知道完整生日</text><switch checked="{{hasBirthday}}" color="#d4756a" bindchange="onHasBirthdayChange" /></view>
-      <block wx:if="{{hasBirthday}}">
-      <text class="label">历法</text>
-      <picker mode="selector" range="{{birthdayTypeOptions}}" value="{{birthdayTypeIndex}}" bindchange="onBirthdayTypeChange"><view class="picker">{{birthdayTypeIndex === 0 ? '农历' : '阳历'}} ›</view></picker>
-      <view wx:if="{{form.birthdayType === 'lunar'}}" class="switch-row">
-        <text class="label">闰月生日</text>
-        <switch checked="{{form.isLeapMonth}}" color="#d4756a" bindchange="onLeapMonthChange" />
-      </view>
-      <view class="three-cols">
-        <view class="field"><text class="label">月</text><input class="input" type="number" value="{{form.birthMonth}}" data-field="birthMonth" bindinput="setNumber" /></view>
-        <view class="field"><text class="label">日</text><input class="input" type="number" value="{{form.birthDay}}" data-field="birthDay" bindinput="setNumber" /></view>
-      </view>
-      </block>
-      <text class="label">出生年份</text>
-      <input class="input" type="number" value="{{form.birthYear}}" data-field="birthYear" bindinput="setNumber" placeholder="不知道可不填" />
-    </view>
+      <view class="print-rule"></view>
 
-    <view class="card">
-      <text class="section-title">亲缘关系</text>
-      <text class="hint">关系可以以后补充；父母和配偶会自动形成双向图谱。</text>
-      <text class="label">父亲</text>
-      <view class="picker relation-picker" data-field="father" bindtap="openMemberSelector">
-        <view class="relation-value">
-          <text>{{memberOptions[fatherIndex].name}}</text>
-          <text wx:if="{{fatherIndex > 0}}" class="relation-meta">{{memberOptions[fatherIndex].meta}}</text>
-        </view>
-        <text class="picker-arrow">›</text>
-      </view>
-      <text class="label">母亲</text>
-      <view class="picker relation-picker" data-field="mother" bindtap="openMemberSelector">
-        <view class="relation-value">
-          <text>{{memberOptions[motherIndex].name}}</text>
-          <text wx:if="{{motherIndex > 0}}" class="relation-meta">{{memberOptions[motherIndex].meta}}</text>
-        </view>
-        <text class="picker-arrow">›</text>
-      </view>
-      <text class="label">配偶</text>
-      <view class="picker relation-picker" data-field="spouse" bindtap="openMemberSelector">
-        <view class="relation-value">
-          <text>{{memberOptions[spouseIndex].name}}</text>
-          <text wx:if="{{spouseIndex > 0}}" class="relation-meta">{{memberOptions[spouseIndex].meta}}</text>
-        </view>
-        <text class="picker-arrow">›</text>
-      </view>
-    </view>
+      <view class="section">
+        <text class="section__cap">基本资料</text>
 
-    <view class="footer">
-    <button wx:if="{{canDelete}}" class="delete-button" loading="{{saving}}" disabled="{{saving}}" bindtap="deleteCurrentMember">删除成员</button>
-    <button class="submit" loading="{{saving}}" disabled="{{saving}}" bindtap="submit">保存成员</button>
+        <view class="field">
+          <text class="field__label">姓名 *</text>
+          <input
+            class="field__input"
+            value="{{form.name}}"
+            data-field="name"
+            bindinput="setText"
+            maxlength="30"
+            placeholder="请输入姓名"
+            placeholder-class="field__placeholder"
+          />
+        </view>
+
+        <view class="field">
+          <text class="field__label">昵称</text>
+          <input
+            class="field__input"
+            value="{{form.nickName}}"
+            data-field="nickName"
+            bindinput="setText"
+            maxlength="30"
+            placeholder="可不填"
+            placeholder-class="field__placeholder"
+          />
+        </view>
+
+        <view class="field field--row">
+          <text class="field__label">性别</text>
+          <picker class="field__picker" mode="selector" range="{{genderOptions}}" value="{{genderIndex}}" bindchange="onGenderChange">
+            <view class="field__value">{{genderOptions[genderIndex]}}<text class="field__arrow">›</text></view>
+          </picker>
+        </view>
+      </view>
+
+      <view class="print-rule"></view>
+
+      <view class="section">
+        <text class="section__cap">生日</text>
+
+        <view class="switch-row">
+          <text class="field__label field__label--inline">知道完整生日</text>
+          <switch checked="{{hasBirthday}}" color="#b5564c" bindchange="onHasBirthdayChange" />
+        </view>
+
+        <block wx:if="{{hasBirthday}}">
+          <view class="field field--row">
+            <text class="field__label">历法</text>
+            <picker class="field__picker" mode="selector" range="{{birthdayTypeOptions}}" value="{{birthdayTypeIndex}}" bindchange="onBirthdayTypeChange">
+              <view class="field__value">{{birthdayTypeIndex === 0 ? '农历' : '阳历'}}<text class="field__arrow">›</text></view>
+            </picker>
+          </view>
+
+          <view wx:if="{{form.birthdayType === 'lunar'}}" class="switch-row">
+            <text class="field__label field__label--inline">闰月生日</text>
+            <switch checked="{{form.isLeapMonth}}" color="#b5564c" bindchange="onLeapMonthChange" />
+          </view>
+
+          <view class="field-row">
+            <view class="field field--half">
+              <text class="field__label">月</text>
+              <input class="field__input" type="number" value="{{form.birthMonth}}" data-field="birthMonth" bindinput="setNumber" />
+            </view>
+            <view class="field field--half">
+              <text class="field__label">日</text>
+              <input class="field__input" type="number" value="{{form.birthDay}}" data-field="birthDay" bindinput="setNumber" />
+            </view>
+          </view>
+        </block>
+
+        <view class="field">
+          <text class="field__label">出生年份</text>
+          <input
+            class="field__input"
+            type="number"
+            value="{{form.birthYear}}"
+            data-field="birthYear"
+            bindinput="setNumber"
+            placeholder="不知道可不填"
+            placeholder-class="field__placeholder"
+          />
+        </view>
+      </view>
+
+      <view class="print-rule"></view>
+
+      <view class="section">
+        <text class="section__cap">亲缘关系</text>
+        <text class="hint">关系可以以后补充；父母和配偶会自动形成双向图谱。</text>
+
+        <view class="field field--row field--relation" data-field="father" bindtap="openMemberSelector" hover-class="tap-pressed">
+          <text class="field__label">父亲</text>
+          <view class="relation-value">
+            <text class="relation-value__name">{{memberOptions[fatherIndex].name}}</text>
+            <text wx:if="{{fatherIndex > 0}}" class="relation-value__meta">{{memberOptions[fatherIndex].meta}}</text>
+          </view>
+          <text class="field__arrow">›</text>
+        </view>
+
+        <view class="field field--row field--relation" data-field="mother" bindtap="openMemberSelector" hover-class="tap-pressed">
+          <text class="field__label">母亲</text>
+          <view class="relation-value">
+            <text class="relation-value__name">{{memberOptions[motherIndex].name}}</text>
+            <text wx:if="{{motherIndex > 0}}" class="relation-value__meta">{{memberOptions[motherIndex].meta}}</text>
+          </view>
+          <text class="field__arrow">›</text>
+        </view>
+
+        <view class="field field--row field--relation" data-field="spouse" bindtap="openMemberSelector" hover-class="tap-pressed">
+          <text class="field__label">配偶</text>
+          <view class="relation-value">
+            <text class="relation-value__name">{{memberOptions[spouseIndex].name}}</text>
+            <text wx:if="{{spouseIndex > 0}}" class="relation-value__meta">{{memberOptions[spouseIndex].meta}}</text>
+          </view>
+          <text class="field__arrow">›</text>
+        </view>
+      </view>
+
+      <view class="print-rule"></view>
+
+      <view class="footer">
+        <button wx:if="{{canDelete}}" class="delete-button" loading="{{saving}}" disabled="{{saving}}" bindtap="deleteCurrentMember" hover-class="tap-pressed">删除</button>
+        <button class="submit" loading="{{saving}}" disabled="{{saving}}" bindtap="submit" hover-class="tap-pressed">保存</button>
+      </view>
     </view>
   </scroll-view>
 
-  <view wx:if="{{selectorVisible}}" class="selector-mask" bindtap="closeMemberSelector" catchtouchmove="preventBubble">
+  <view wx:if="{{selectorVisible}}" class="selector-layer">
+    <view class="selector-mask" bindtap="closeMemberSelector" catchtouchmove="preventBubble"></view>
     <view class="selector-sheet" catchtap="preventBubble">
       <view class="selector-handle"></view>
       <view class="selector-header">
-        <view>
+        <view class="selector-header__main">
           <text class="selector-title">{{selectorTitle}}</text>
           <text class="selector-count">共 {{memberOptions.length - 1}} 位可选成员</text>
         </view>
-        <view class="selector-close" bindtap="closeMemberSelector">×</view>
+        <view class="selector-close" bindtap="closeMemberSelector" hover-class="tap-pressed">×</view>
       </view>
 
       <view class="selector-search">
@@ -90,7 +165,7 @@
       </view>
 
       <view class="selector-none" bindtap="clearRelationSelection">
-        <view>
+        <view class="selector-option-body">
           <text class="selector-option-name">暂不选择</text>
           <text class="selector-option-meta">关系可以稍后补充</text>
         </view>

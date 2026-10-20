@@ -9,6 +9,7 @@ interface PersonCard {
   name: string
   relation: string
   meta: string
+  ageLabel: string
   avatarText: string
   color: string
   background: string
@@ -27,6 +28,9 @@ Component({
     keyword: '',
     totalCount: 0,
     generationCount: 0,
+    familyName: '',
+    memberCount: 0,
+    dayOfYear: 0,
     currentMemberId: '',
     focusId: '',
     focus: null as PersonCard | null,
@@ -57,6 +61,11 @@ Component({
 
   methods: {
     async refreshFamily() {
+      const now = new Date()
+      const dayOfYear = Math.floor(
+        (Date.UTC(now.getFullYear(), now.getMonth(), now.getDate())
+          - Date.UTC(now.getFullYear(), 0, 0)) / 86400000
+      )
       try {
         const snapshot = await ensureFamilyData()
         const currentMemberId = snapshot?.family.linkedMemberId
@@ -67,6 +76,9 @@ Component({
         const focusId = previousFocusExists ? this.data.focusId : currentMemberId
         const focusMember = familyMembers.find(member => member.id === focusId)
         this.setData({
+          familyName: snapshot?.family.name ?? '',
+          memberCount: familyMembers.length,
+          dayOfYear,
           currentMemberId,
           focusId,
           selectedGeneration: focusMember?.generation ?? 0,
@@ -86,6 +98,7 @@ Component({
         name: member.name,
         relation: member.relation || '家人',
         meta: details.join(' · ') || '资料待完善',
+        ageLabel: age === null ? '年龄待补' : `${age}岁`,
         avatarText: member.name.trim().slice(-1) || '家',
         color,
         background: `${color}16`,

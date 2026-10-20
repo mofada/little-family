@@ -7,7 +7,7 @@
   <!-- 我的标记 -->
   <view wx:if="{{isMe}}" class="member-card__badge member-card__badge--me">我</view>
   <!-- 生日标记 -->
-  <view wx:if="{{isBirthday}}" class="member-card__badge member-card__badge--birthday">🎂</view>
+  <view wx:if="{{isBirthday}}" class="member-card__badge member-card__badge--birthday">生</view>
 
   <!-- 头像 -->
   <view class="member-card__avatar" style="background: {{color}}20;">

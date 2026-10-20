@@ -1,20 +1,44 @@
 <view class="page">
-  <navigation-bar title="亲人邀请" back="{{false}}" color="black" background="#f7f3ef" />
-  <view class="content">
-    <view class="invite-card">
-      <view class="family-icon">👨‍👩‍👧‍👦</view>
-      <text class="title">亲人邀请你加入家庭</text>
-      <text class="description">加入后，你可以一起完善家庭成员、亲缘关系和生日记录。</text>
+  <navigation-bar title="家庭邀请" back="{{false}}" color="black" background="#f7f3ef" />
 
-      <view wx:if="{{errorMessage}}" class="error-message">{{errorMessage}}</view>
-      <view
-        wx:if="{{code}}"
-        class="primary-button"
-        bindtap="acceptInvite"
-        hover-class="action-pressed"
-      >{{accepting ? '正在加入…' : '接受邀请并加入'}}</view>
-      <view class="secondary-button" bindtap="goHome" hover-class="action-pressed">暂不加入</view>
-      <text class="hint">邀请一次有效，请确认这是你认识的亲人发送的邀请。</text>
+  <scroll-view class="page__list" scroll-y enhanced show-scrollbar="{{false}}">
+    <view class="sheet">
+      <view wx:if="{{loading}}" class="frame">
+        <text class="frame__notice">正在读取邀请…</text>
+      </view>
+
+      <view wx:elif="{{joinedName}}" class="frame">
+        <view class="mark mark--seal"><text>✓</text></view>
+        <text class="frame__title">已加入 {{joinedName}}</text>
+        <text class="frame__desc">现在可以在首页看到家人的生日，也能一起维护成员信息。</text>
+        <view class="frame__primary" bindtap="goHome" hover-class="tap-pressed">去首页</view>
+      </view>
+
+      <view wx:elif="{{preview}}" class="frame">
+        <view class="mark"><text>{{familyInitial}}</text></view>
+        <text class="frame__title">{{preview.familyName}}</text>
+        <text class="frame__desc">邀请你一起记录家庭成员与生日。加入后可以看到这个家庭的资料，并一起维护。</text>
+
+        <view class="meta-row">
+          <text>还可加入 {{preview.remainingUses}} 人</text>
+          <text wx:if="{{expiresLabel}}" class="meta-row__expiry">{{expiresLabel}}失效</text>
+        </view>
+
+        <view wx:if="{{errorMessage}}" class="frame__error">{{errorMessage}}</view>
+
+        <view class="frame__primary" bindtap="acceptInvite" hover-class="tap-pressed">
+          {{accepting ? '正在加入…' : '接受邀请并加入'}}
+        </view>
+        <view class="print-action print-action--wide action--center" bindtap="goHome" hover-class="tap-pressed">暂不加入</view>
+        <text class="frame__hint">家庭资料仅对受邀成员可见，加入后可以随时通过「我的」退出。</text>
+      </view>
+
+      <view wx:else class="frame">
+        <text class="frame__title">邀请不可用</text>
+        <text class="frame__desc">{{errorMessage}}</text>
+        <view class="frame__primary" bindtap="goHome" hover-class="tap-pressed">回首页</view>
+        <view wx:if="{{code}}" class="print-action print-action--wide action--center" bindtap="loadPreview" hover-class="tap-pressed">重新检查</view>
+      </view>
     </view>
-  </view>
+  </scroll-view>
 </view>

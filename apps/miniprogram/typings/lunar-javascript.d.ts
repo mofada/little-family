@@ -12,5 +12,7 @@ declare module 'lunar-javascript' {
     getSolar(): Solar
     getMonth(): number
     getDay(): number
+    getMonthInChinese(): string
+    getDayInChinese(): string
   }
 }

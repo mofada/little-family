@@ -184,11 +184,43 @@ export const leaveFamily = async (familyId: string): Promise<void> => {
   if (getActiveFamilyId() === familyId) wx.removeStorageSync(ACTIVE_FAMILY_KEY)
 }
 
-export const createInvitation = async (familyId: string): Promise<{ code: string; expiresAt: string }> => {
+export interface InvitationPreview {
+  familyName: string
+  role: 'admin' | 'editor' | 'viewer'
+  remainingUses: number
+  expiresAt: string
+}
+
+// 邀请一次生成可供 5 位家人使用，7 天有效；后端上限是 20 人与 30 天。
+export const INVITE_MAX_USES = 5
+export const INVITE_EXPIRES_IN_HOURS = 168
+
+export const createInvitation = async (
+  familyId: string,
+): Promise<{ invitationId: string; code: string; expiresAt: string; maxUses: number }> => {
   await ensureAuth()
   return request(`/api/families/${familyId}/invitations`, 'POST', {
-    role: 'editor', maxUses: 1, expiresInHours: 72,
+    role: 'editor', maxUses: INVITE_MAX_USES, expiresInHours: INVITE_EXPIRES_IN_HOURS,
   })
+}
+
+export const revokeInvitation = async (familyId: string, invitationId: string): Promise<void> => {
+  await request(`/api/families/${familyId}/invitations/${invitationId}`, 'DELETE')
+}
+
+export interface JoinSummary {
+  recentCount: number
+  lastJoinedAt: string | null
+}
+
+export const getJoinSummary = async (familyId: string): Promise<JoinSummary> => {
+  return request<JoinSummary>(`/api/families/${familyId}/joins/summary`)
+}
+
+export const previewInvitation = async (code: string): Promise<InvitationPreview> => {
+  return request<InvitationPreview>(
+    `/api/invitations/${encodeURIComponent(code)}/preview`, 'GET', undefined, false,
+  )
 }
 
 export const createWebLoginCode = async (): Promise<{ code: string; expiresAt: string }> => {

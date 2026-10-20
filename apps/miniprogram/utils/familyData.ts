@@ -97,6 +97,17 @@ export const getTodayBirthdays = (): FamilyMember[] => {
   })
 }
 
+// 今日农历标签，用于首页日期头；闰月时带“闰”字，换算失败时不显示。
+export const getTodayLunarLabel = (now = new Date()): string => {
+  try {
+    const lunar = Solar.fromDate(now).getLunar()
+    const leap = lunar.getMonth() < 0 ? '闰' : ''
+    return `农历${leap}${lunar.getMonthInChinese()}月${lunar.getDayInChinese()}`
+  } catch {
+    return ''
+  }
+}
+
 // 未来N天生日（不含今天）
 export const getUpcomingBirthdays = (days = 30): FamilyMember[] => {
   return familyMembers

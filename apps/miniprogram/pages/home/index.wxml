@@ -1,107 +1,150 @@
 <view class="page">
-<navigation-bar title="小家记" back="{{false}}" color="black" background="#f7f3ef" />
+  <navigation-bar title="小家记" back="{{false}}" color="black" background="#f7f3ef" />
 
-<scroll-view class="page__list" scroll-y type="list" enhanced show-scrollbar="{{false}}">
+  <scroll-view class="page__list" scroll-y type="list" enhanced show-scrollbar="{{false}}">
 
-  <view wx:if="{{loading}}" class="empty-today">
-    <text class="empty-emoji">⏳</text>
-    <text class="empty-text">正在加载家庭数据…</text>
-  </view>
+    <view wx:if="{{loading}}" class="state">
+      <text class="state__desc">正在加载家庭数据…</text>
+    </view>
 
-  <view wx:if="{{needsFamily}}" class="section">
-    <view class="empty-today">
-      <text class="empty-emoji">🏡</text>
-      <text class="section-title">创建你的第一个家庭</text>
-      <text class="empty-text">家庭数据仅对受邀成员可见</text>
-      <view class="copy-btn" bindtap="goFamilyManage"><text>开始设置</text></view>
+    <view wx:elif="{{error}}" class="state">
+      <text class="state__title">没能读到家庭数据</text>
+      <text class="state__desc">{{error}}</text>
+      <view class="state__button" bindtap="retry" hover-class="tap-pressed">重试</view>
     </view>
-  </view>
 
-  <!-- 统计卡片 -->
-  <view wx:if="{{!loading && !needsFamily}}" class="stats-grid">
-    <view class="stat-card" bindtap="goPage" data-path="/pages/tree/index" hover-class="stat-card--pressed">
-      <text class="stat-value">{{statsTotal}}</text>
-      <text class="stat-label">成员总数</text>
+    <view wx:elif="{{needsFamily}}" class="state">
+      <text class="state__title">还没有家庭</text>
+      <text class="state__desc">设置完成后，家人的生日会显示在这里</text>
+      <view class="state__button" bindtap="goFamilyManage" hover-class="tap-pressed">开始设置</view>
     </view>
-    <view class="stat-card stat-card--accent" bindtap="goPage" data-path="/pages/birthday/index" hover-class="stat-card--pressed">
-      <text class="stat-value">{{statsTodayCount}}</text>
-      <text class="stat-label">今日生日</text>
-    </view>
-    <view class="stat-card" bindtap="goPage" data-path="/pages/birthday/index" hover-class="stat-card--pressed">
-      <text class="stat-value">{{statsUpcoming}}</text>
-      <text class="stat-label">近30天</text>
-    </view>
-  </view>
 
-  <!-- 今日生日 -->
-  <view wx:if="{{todayBirthdays.length > 0}}" class="section">
-    <view class="section-header">
-      <text class="section-title">🎂 今日生日</text>
-    </view>
-    <view wx:for="{{todayBirthdays}}" wx:key="id" class="birthday-row today-row">
-      <view class="birthday-avatar" style="background: {{item.color}}20;">
-        <text class="birthday-avatar-emoji">🎂</text>
+    <block wx:else>
+      <view class="sheet">
+      <view class="masthead">
+        <text class="masthead__name">{{familyName || '小家记'}}</text>
+        <text class="seal">家</text>
       </view>
-      <view class="birthday-info">
-        <text class="birthday-name">{{item.name}}</text>
-        <text class="birthday-meta">{{item.relation}} · {{item.birthdayType === 'lunar' ? (item.isLeapMonth ? '农历闰' : '农历') : '阳历'}}{{item.birthMonth}}月{{item.birthDay}}日</text>
-      </view>
-      <view bindtap="generateTodayWish" data-index="{{index}}" class="copy-btn">
-        <text>生成生日祝福</text>
-      </view>
-    </view>
-  </view>
 
-  <!-- 无今日生日 -->
-  <view wx:else class="section">
-    <view class="empty-today">
-      <text class="empty-emoji">📅</text>
-      <text class="empty-text">今天暂无生日</text>
-    </view>
-  </view>
+      <view class="rule"></view>
 
-  <!-- 即将过生日 -->
-  <view wx:if="{{upcomingBirthdays.length > 0}}" class="section">
-    <view class="section-header">
-      <text class="section-title">🔔 即将过生日</text>
-      <text class="section-sub">未来30天</text>
-    </view>
-    <view wx:for="{{upcomingBirthdays}}" wx:key="id" class="birthday-row">
-      <view class="birthday-avatar" style="background: {{item.color}}20;">
-        <text class="birthday-avatar-emoji">{{item.isUrgent ? '⚡' : '👤'}}</text>
+      <view class="dateline">
+        <view class="dateline__left">
+          <text class="dateline__month">{{monthLabel}}</text>
+          <text class="dateline__day {{todayEmpty ? '' : 'dateline__day--busy'}}">{{dayNumber}}</text>
+          <text class="dateline__weekday">{{weekdayLabel}}</text>
+        </view>
+        <view class="dateline__right">
+          <text class="dateline__lunar">{{lunarLabel}}</text>
+          <text class="dateline__state {{todayEmpty ? 'dateline__state--quiet' : 'dateline__state--busy'}}">{{todayState}}</text>
+        </view>
       </view>
-      <view class="birthday-info">
-        <text class="birthday-name">{{item.name}}</text>
-        <text class="birthday-meta">{{item.relation}} · {{item.birthdayType === 'lunar' ? (item.isLeapMonth ? '农历闰' : '农历') : '阳历'}}{{item.birthMonth}}月{{item.birthDay}}日</text>
-      </view>
-      <view class="days-badge {{item.isUrgent ? 'days-badge--urgent' : ''}}">
-        <text>{{item.daysUntil}}天后</text>
-      </view>
-    </view>
-  </view>
 
-  <!-- 快速导航 -->
-  <view class="section nav-section">
-    <view class="section-header">
-      <text class="section-title">🧭 快速导航</text>
-    </view>
-    <view class="nav-grid">
-      <view class="nav-item" bindtap="goPage" data-path="/pages/tree/index">
-        <text class="nav-icon">🌳</text>
-        <text class="nav-label">族谱树</text>
+      <view wx:if="{{!todayEmpty}}" class="today-list">
+        <view wx:for="{{todayPeople}}" wx:key="id" class="today-item">
+          <view
+            class="today-item__row"
+            bindtap="onMemberTap"
+            data-json="{{item.memberJson}}"
+            hover-class="row--pressed"
+          >
+            <view class="today-item__avatar"><text>{{item.avatarText}}</text></view>
+            <view class="today-item__info">
+              <text class="today-item__name">{{item.name}}</text>
+              <text class="today-item__meta">{{item.meta}}</text>
+            </view>
+            <text class="today-item__more">资料 ›</text>
+          </view>
+          <view
+            class="wish"
+            catchtap="generateWish"
+            data-id="{{item.id}}"
+            hover-class="tap-pressed"
+          >给 {{item.name}} 写祝福</view>
+        </view>
       </view>
-      <view class="nav-item" bindtap="goPage" data-path="/pages/birthday/index">
-        <text class="nav-icon">🎂</text>
-        <text class="nav-label">生日</text>
-      </view>
-      <view class="nav-item" bindtap="goPage" data-path="/pages/profile/index">
-        <text class="nav-icon">👤</text>
-        <text class="nav-label">我的</text>
-      </view>
-    </view>
-  </view>
 
-</scroll-view>
+      <view class="rule"></view>
 
-<member-modal show="{{showModal}}" memberJson="{{selectedMemberJson}}" bind:close="onModalClose" />
+      <view class="ledger">
+        <view class="ledger__head">
+          <text class="ledger__title">接下来 30 天</text>
+          <text wx:if="{{upcomingCount > 0}}" class="ledger__count">还有 {{upcomingCount}} 位</text>
+        </view>
+
+        <view
+          wx:for="{{upcoming}}"
+          wx:key="id"
+          class="entry"
+          bindtap="onMemberTap"
+          data-json="{{item.memberJson}}"
+          hover-class="row--pressed"
+        >
+          <view class="entry__date">
+            <text class="entry__day">{{item.day}}</text>
+            <text class="entry__month">{{item.month}}</text>
+          </view>
+          <view class="entry__info">
+            <text class="entry__name">{{item.name}}</text>
+            <text class="entry__meta">{{item.meta}}</text>
+          </view>
+          <text class="entry__badge {{item.isUrgent ? 'entry__badge--soon' : ''}}">{{item.badge}}</text>
+        </view>
+
+        <view wx:if="{{upcomingCount === 0}}" class="entry entry--empty">
+          <text>接下来 30 天没有生日</text>
+        </view>
+      </view>
+
+      <block wx:if="{{reminderConfigured || missingCount > 0}}">
+        <view class="rule"></view>
+
+        <view wx:if="{{reminderConfigured}}" class="notice">
+          <view class="notice__main">
+            <text class="notice__label">生日提醒</text>
+            <text class="notice__detail">{{reminderEnabled ? '已开启 · 每天 8:00 推送' : '尚未开启'}}</text>
+          </view>
+          <view
+            wx:if="{{reminderEnabled}}"
+            class="action action--ghost"
+            bindtap="goBirthday"
+            hover-class="tap-pressed"
+          >查看</view>
+          <view
+            wx:else
+            class="action action--primary"
+            bindtap="goBirthday"
+            hover-class="tap-pressed"
+          >开启提醒</view>
+        </view>
+
+        <view wx:if="{{missingCount > 0}}" class="notice">
+          <view class="notice__main">
+            <text class="notice__label">还有 {{missingCount}} 位没填生日</text>
+            <text class="notice__detail">补上之后才会出现在这里</text>
+          </view>
+          <view
+            wx:if="{{canManage}}"
+            class="action"
+            bindtap="goBirthday"
+            hover-class="tap-pressed"
+          >去补充</view>
+          <text wx:else class="notice__plain">让维护者补充</text>
+        </view>
+      </block>
+
+      <view class="rule rule--footer"></view>
+
+      <view class="action action--wide" bindtap="goBirthday" hover-class="tap-pressed">
+        <text class="action__label">查看全部生日</text>
+        <text class="action__meta">{{monthRemaining > 0 ? '本月还有 ' + monthRemaining + ' 位' : ''}}</text>
+      </view>
+
+      <view class="colophon"><text>{{colophon}}</text></view>
+      </view>
+    </block>
+
+  </scroll-view>
+
+  <member-modal show="{{showModal}}" memberJson="{{selectedMemberJson}}" bind:close="onModalClose" />
 </view>
