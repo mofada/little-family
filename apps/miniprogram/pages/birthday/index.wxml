@@ -10,6 +10,17 @@
 
       <view class="print-rule"></view>
 
+      <page-state wx:if="{{loading}}" mode="loading" desc="正在加载家庭数据…" />
+      <page-state
+        wx:elif="{{error}}"
+        mode="error"
+        title="没能读到家庭数据"
+        desc="{{error}}"
+        actionText="重试"
+        bind:action="retry"
+      />
+
+      <block wx:else>
       <view class="toolbar">
         <view class="toolbar__row">
           <view class="search-box">
@@ -88,10 +99,14 @@
         >{{subscribing ? '请求中' : reminderAction}}</view>
       </view>
 
-      <view wx:if="{{emptyTitle && monthSections.length === 0 && noBirthdayMembers.length === 0}}" class="state">
-        <text class="state__title">{{emptyTitle}}</text>
-        <text class="state__desc">{{emptyDesc}}</text>
-      </view>
+      <page-state
+        wx:if="{{emptyTitle && monthSections.length === 0 && noBirthdayMembers.length === 0}}"
+        mode="empty"
+        title="{{emptyTitle}}"
+        desc="{{emptyDesc}}"
+        actionText="{{emptyAction}}"
+        bind:action="onEmptyAction"
+      />
 
       <view wx:for="{{monthSections}}" wx:key="monthKey" class="month">
         <view class="month__head">
@@ -184,6 +199,7 @@
       <view wx:if="{{monthSections.length > 0 || noBirthdayMembers.length > 0}}" class="list-footer">愿每个重要的日子，都被家人记得</view>
 
       <view wx:if="{{familyId}}" class="print-colophon"><text>{{familyName}} · {{memberCount}} 位家人 · 第 {{dayOfYear}} 天</text></view>
+      </block>
     </view>
   </scroll-view>
 </view>

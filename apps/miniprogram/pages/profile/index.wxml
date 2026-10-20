@@ -10,9 +10,15 @@
 
       <view class="print-rule"></view>
 
-      <view wx:if="{{loading}}" class="loading">
-        <text>正在加载家庭数据…</text>
-      </view>
+      <page-state wx:if="{{loading}}" mode="loading" desc="正在加载家庭数据…" />
+      <page-state
+        wx:elif="{{error}}"
+        mode="error"
+        title="没能读到家庭数据"
+        desc="{{error}}"
+        actionText="重试"
+        bind:action="retry"
+      />
 
       <block wx:else>
         <block wx:if="{{me}}">
@@ -54,10 +60,14 @@
           </view>
         </block>
 
-        <view wx:else class="empty">
-          <text class="empty__title">{{hasFamily ? '还没有家人资料' : '还没有家庭'}}</text>
-          <text class="empty__desc">{{hasFamily ? '从家庭与成员管理开始，把家人录进来。' : '创建或加入一个家庭，再回来看看。'}}</text>
-        </view>
+        <page-state
+          wx:else
+          mode="empty"
+          title="{{emptyTitle}}"
+          desc="{{emptyDesc}}"
+          actionText="{{emptyAction}}"
+          bind:action="onEmptyAction"
+        />
 
         <!-- 设置：细线行，右侧是值或箭头 -->
         <view class="settings">
@@ -100,9 +110,9 @@
             </view>
           </view>
         </view>
-      </block>
 
-      <view wx:if="{{hasFamily}}" class="print-colophon"><text>{{familyName}} · {{memberCount}} 位家人 · 第 {{dayOfYear}} 天</text></view>
+        <view wx:if="{{hasFamily}}" class="print-colophon"><text>{{familyName}} · {{memberCount}} 位家人 · 第 {{dayOfYear}} 天</text></view>
+      </block>
     </view>
   </scroll-view>
 

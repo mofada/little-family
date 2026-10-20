@@ -3,7 +3,8 @@
   "navigationStyle": "custom",
   "usingComponents": {
     "navigation-bar": "../../components/navigation-bar/navigation-bar",
-    "member-modal": "../../components/member-modal/index"
+    "member-modal": "../../components/member-modal/index",
+    "page-state": "../../components/page-state/index"
   },
   "disableScroll": true
 }

@@ -1,4 +1,4 @@
-import { familyMembers, getMemberColor, calculateAge } from '../../utils/familyData'
+import { familyMembers, calculateAge } from '../../utils/familyData'
 import { ensureFamilyData } from '../../services/familyStore'
 
 type Member = typeof familyMembers[number]
@@ -10,9 +10,6 @@ interface PersonCard {
   relation: string
   meta: string
   ageLabel: string
-  avatarText: string
-  color: string
-  background: string
   isMe: boolean
 }
 
@@ -25,6 +22,8 @@ interface GenerationTab {
 
 Component({
   data: {
+    loading: true,
+    error: '',
     keyword: '',
     totalCount: 0,
     generationCount: 0,
@@ -68,12 +67,11 @@ Component({
       )
       try {
         const snapshot = await ensureFamilyData()
-        const currentMemberId = snapshot?.family.linkedMemberId
-          ?? familyMembers.find(member => member.relation === '我自己')?.id
-          ?? familyMembers[0]?.id
-          ?? ''
+        const currentMemberId = snapshot?.family.linkedMemberId ?? ''
         const previousFocusExists = familyMembers.some(member => member.id === this.data.focusId)
-        const focusId = previousFocusExists ? this.data.focusId : currentMemberId
+        const focusId = previousFocusExists
+          ? this.data.focusId
+          : (currentMemberId || familyMembers[0]?.id || '')
         const focusMember = familyMembers.find(member => member.id === focusId)
         this.setData({
           familyName: snapshot?.family.name ?? '',
@@ -82,14 +80,23 @@ Component({
           currentMemberId,
           focusId,
           selectedGeneration: focusMember?.generation ?? 0,
+          loading: false,
+          error: '',
         }, () => this.buildView())
       } catch (error) {
-        wx.showToast({ title: error instanceof Error ? error.message : '加载失败', icon: 'none' })
+        this.setData({
+          loading: false,
+          error: '网络不稳定或服务暂时不可用，请稍后再试',
+        })
       }
     },
 
+    retry() {
+      this.setData({ loading: true, error: '' })
+      void this.refreshFamily()
+    },
+
     toCard(member: Member): PersonCard {
-      const color = getMemberColor(member)
       const age = calculateAge(member.birthYear)
       const details = [member.nickName, age === null ? '' : `${age}岁`].filter(Boolean)
       return {
@@ -99,9 +106,6 @@ Component({
         relation: member.relation || '家人',
         meta: details.join(' · ') || '资料待完善',
         ageLabel: age === null ? '年龄待补' : `${age}岁`,
-        avatarText: member.name.trim().slice(-1) || '家',
-        color,
-        background: `${color}16`,
         isMe: member.id === this.data.currentMemberId,
       }
     },

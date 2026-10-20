@@ -193,7 +193,12 @@
 .delete-button {
   flex: none;
   width: 180rpx;
+  min-width: 0;
   height: 64rpx;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   margin: 0;
   padding: 0;
   border: 2rpx solid #b91c1c;
@@ -202,7 +207,8 @@
   color: #b91c1c;
   font-size: 24rpx;
   letter-spacing: 2rpx;
-  line-height: 86rpx;
+  line-height: 1;
+  text-align: center;
 }
 
 .delete-button::after {

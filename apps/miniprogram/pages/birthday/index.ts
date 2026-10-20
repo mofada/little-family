@@ -35,9 +35,10 @@ const WEEKDAYS = ['周日', '周一', '周二', '周三', '周四', '周五', '�
 
 Component({
   data: {
+    loading: true,
+    error: '',
     keyword: '',
     filterType: 'all' as 'all' | 'lunar' | 'solar',
-    dateBig: '',
     dateMeta: '',
     dayNumber: '',
     dayOfYear: 0,
@@ -54,6 +55,7 @@ Component({
     manageHint: '',
     emptyTitle: '',
     emptyDesc: '',
+    emptyAction: '',
     reminderEnabled: false,
     reminderStatus: '',
     reminderAction: '',
@@ -108,7 +110,6 @@ Component({
         })
 
         const now = new Date()
-        const dateBig = `${now.getMonth() + 1}月${now.getDate()}日`
         const dateMeta = [WEEKDAYS[now.getDay()], getTodayLunarLabel(now)].filter(Boolean).join(' · ')
         const dayNumber = String(now.getDate()).padStart(2, '0')
         const dayOfYear = Math.floor(
@@ -188,7 +189,6 @@ Component({
           }))
 
         this.setData({
-          dateBig,
           dateMeta,
           dayNumber,
           dayOfYear,
@@ -206,10 +206,37 @@ Component({
               : activeRole === 'owner'
                 ? '点上方「添加」，先录入第一位家人'
                 : '等家庭所有者录入家人资料',
+          emptyAction: !familyId
+            ? '去家庭管理'
+            : activeRole === 'owner' && familyMembers.length === 0
+              ? '添加第一位家人'
+              : '',
+          loading: false,
+          error: '',
         })
       } catch (error) {
-        wx.showToast({ title: error instanceof Error ? error.message : '加载失败', icon: 'none' })
+        this.setData({
+          loading: false,
+          error: '网络不稳定或服务暂时不可用，请稍后再试',
+        })
       }
+    },
+
+    retry() {
+      this.setData({ loading: true, error: '' })
+      void this.buildList()
+    },
+
+    goFamilyManage() {
+      wx.navigateTo({ url: '/pages/family-manage/index' })
+    },
+
+    onEmptyAction() {
+      if (!this.data.familyId) {
+        this.goFamilyManage()
+        return
+      }
+      if (this.data.canAddMember) this.startAddMember()
     },
 
     async loadSubscription(familyId: string) {
@@ -238,8 +265,8 @@ Component({
         reminderStatus: !config.configured
           ? '生日提醒暂未开放'
           : enabled
-            ? `提醒已开启 · 本月还可提醒 ${config.activeGrantCount} 次`
-            : '提醒未开启 · 开启后每天 8 点推送',
+            ? `提醒已开启 · 还可提醒 ${config.activeGrantCount} 次`
+            : '提醒未开启 · 开启后 8 点推送',
         reminderAction: !config.configured
           ? ''
           : enabled

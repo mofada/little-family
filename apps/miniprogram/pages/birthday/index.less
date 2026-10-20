@@ -88,8 +88,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 9999rpx;
-  background: #f2ece8;
+  border-radius: 0;
   color: @ink-soft;
   font-size: 24rpx;
 }
@@ -101,17 +100,17 @@
   margin-top: 18rpx;
 }
 
-/* 描边药丸：未选中只有线，选中加深 */
+/* 描边 chip：与图谱、时间轴同一形态，选中只加深描边与字重 */
 .chip {
   min-width: 78rpx;
-  height: 50rpx;
+  height: 56rpx;
   box-sizing: border-box;
   padding: 0 20rpx;
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 1rpx solid @ink-faint;
-  border-radius: 9999rpx;
+  border: 1rpx solid @rule;
+  border-radius: 8rpx;
   color: @ink-soft;
   font-size: 24rpx;
 
@@ -119,7 +118,6 @@
     border-color: @ink;
     color: @ink;
     font-weight: 600;
-    background: #f2ece8;
   }
 }
 
@@ -203,7 +201,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 0;
+  border-radius: 50%;
   background: #fbf1f0;
   color: @vermilion-deep;
   .serif();
@@ -337,7 +335,7 @@
   margin-top: 2rpx;
   font-size: 19rpx;
   letter-spacing: 1rpx;
-  color: @ink-faint;
+  color: @ink-soft;
 }
 
 .entry__day--empty {
@@ -355,6 +353,7 @@
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
+  .serif();
   font-size: 28rpx;
   font-weight: 600;
   color: @ink;
@@ -373,7 +372,7 @@
 
 .entry__countdown {
   flex: none;
-  font-size: 19rpx;
+  font-size: 24rpx;
   letter-spacing: 1rpx;
   white-space: nowrap;
   color: @ink-soft;
@@ -455,30 +454,7 @@
   padding-bottom: 8rpx;
 }
 
-/* 空状态：只留一句话，不摆放装饰 */
-.state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 90rpx 0 40rpx;
-  text-align: center;
-}
-
-.state__title {
-  .serif();
-  font-size: 31rpx;
-  font-weight: 600;
-  letter-spacing: 1rpx;
-  color: @ink;
-}
-
-.state__desc {
-  margin-top: 12rpx;
-  max-width: 520rpx;
-  font-size: 24rpx;
-  line-height: 1.7;
-  color: @ink-soft;
-}
+/* 空状态由 page-state 承担 */
 
 .list-footer {
   padding: 48rpx 0 0;

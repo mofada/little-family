@@ -2,16 +2,25 @@
   <navigation-bar title="家庭时间轴" back="{{false}}" color="black" background="#f7f3ef" />
 
   <scroll-view class="page__list" scroll-y type="list" enhanced show-scrollbar="{{false}}">
-    <view wx:if="{{loading}}" class="state">
-      <text class="state__title">正在梳理家庭时光…</text>
-      <text class="state__desc">将成员按出生年份排列</text>
-    </view>
+    <page-state wx:if="{{loading}}" mode="loading" desc="正在梳理家庭时光…" />
 
-    <view wx:elif="{{needsFamily}}" class="state">
-      <text class="state__title">还没有家庭资料</text>
-      <text class="state__desc">创建或加入家庭后，时间轴会自动生成</text>
-      <view class="print-action print-action--primary state__action" bindtap="goFamilyManage" hover-class="tap-pressed">开始设置</view>
-    </view>
+    <page-state
+      wx:elif="{{error}}"
+      mode="error"
+      title="没能读到家庭数据"
+      desc="{{error}}"
+      actionText="重试"
+      bind:action="retry"
+    />
+
+    <page-state
+      wx:elif="{{needsFamily}}"
+      mode="empty"
+      title="还没有家庭资料"
+      desc="创建或加入家庭后，时间轴会自动生成"
+      actionText="开始设置"
+      bind:action="goFamilyManage"
+    />
 
     <block wx:else>
       <view class="sheet">
@@ -57,10 +66,12 @@
 
         <text wx:if="{{summaryLabel}}" class="summary">{{summaryLabel}}</text>
 
-        <view wx:if="{{groups.length === 0}}" class="state state--inline">
-          <text class="state__title">{{emptyTitle}}</text>
-          <text class="state__desc">{{emptyDesc}}</text>
-        </view>
+        <page-state
+          wx:if="{{groups.length === 0}}"
+          mode="empty"
+          title="{{emptyTitle}}"
+          desc="{{emptyDesc}}"
+        />
 
         <view wx:else class="timeline">
           <view wx:for="{{groups}}" wx:key="id" class="decade-block">
@@ -98,7 +109,7 @@
                       <text class="event-tag">{{event.genderLabel}}</text>
                     </view>
                   </view>
-                  <view class="event-chevron"></view>
+                  <text class="event-chevron">›</text>
                 </view>
               </view>
             </view>

@@ -16,7 +16,7 @@ import { AppError, type AuthenticatedRequest, type FamilyRole } from './types'
 import { BIRTHDAY_TEMPLATE } from './birthdayTemplate'
 import { getBeijingClock } from './birthdayClock'
 import { runBirthdayReminderJob } from './birthdayReminders'
-import { generateBirthdayWish, generateKinshipLabels } from './deepseek'
+import { generateBirthdayWish, generateKinshipLabels, type KinshipLabelRequest } from './deepseek'
 
 const now = (): string => new Date().toISOString()
 
@@ -146,6 +146,110 @@ const memberBirthdayForAi = (member: MemberRow) => {
   }
 }
 
+type AiBirthday = ReturnType<typeof memberBirthdayForAi>
+type AiPathStep = {
+  memberId: string
+  relation: string
+  gender: MemberRow['gender']
+  birthday: AiBirthday
+}
+
+const parentRelationForAi = (member: MemberRow): string =>
+  member.gender === 'male' ? '爸爸' : member.gender === 'female' ? '妈妈' : '父母'
+
+const childRelationForAi = (member: MemberRow): string =>
+  member.gender === 'male' ? '儿子' : member.gender === 'female' ? '女儿' : '子女'
+
+const spouseRelationForAi = (member: MemberRow): string =>
+  member.gender === 'male' ? '丈夫' : member.gender === 'female' ? '妻子' : '配偶'
+
+const compareBirthdaysForAi = (
+  target: AiBirthday,
+  reference: AiBirthday,
+): 'older' | 'younger' | 'same-birthday' | 'unknown' => {
+  if (target?.year == null || reference?.year == null) return 'unknown'
+  if (target.year !== reference.year) return target.year < reference.year ? 'older' : 'younger'
+  if (target.calendar !== reference.calendar
+    || target.month == null || target.day == null
+    || reference.month == null || reference.day == null) return 'unknown'
+  const targetOrder = target.month * 100 + target.day + (target.isLeapMonth ? 0.5 : 0)
+  const referenceOrder = reference.month * 100 + reference.day + (reference.isLeapMonth ? 0.5 : 0)
+  if (targetOrder === referenceOrder) return 'same-birthday'
+  return targetOrder < referenceOrder ? 'older' : 'younger'
+}
+
+const buildKinshipContextPaths = (
+  viewerMemberId: string,
+  members: MemberRow[],
+  relationships: RelationshipRow[],
+): Map<string, AiPathStep[]> => {
+  const memberById = new Map(members.map(member => [member.id, member]))
+  const neighbors = new Map<string, Array<{ member: MemberRow; relation: string }>>()
+  members.forEach(member => neighbors.set(member.id, []))
+  relationships.forEach(relationship => {
+    const fromMember = memberById.get(relationship.from_member_id)
+    const toMember = memberById.get(relationship.to_member_id)
+    if (!fromMember || !toMember) return
+    if (relationship.type === 'parent') {
+      neighbors.get(toMember.id)?.push({ member: fromMember, relation: parentRelationForAi(fromMember) })
+      neighbors.get(fromMember.id)?.push({ member: toMember, relation: childRelationForAi(toMember) })
+      return
+    }
+    neighbors.get(fromMember.id)?.push({ member: toMember, relation: spouseRelationForAi(toMember) })
+    neighbors.get(toMember.id)?.push({ member: fromMember, relation: spouseRelationForAi(fromMember) })
+  })
+
+  const paths = new Map<string, AiPathStep[]>()
+  paths.set(viewerMemberId, [])
+  const queue = [viewerMemberId]
+  while (queue.length > 0) {
+    const currentId = queue.shift()!
+    const currentPath = paths.get(currentId)!
+    for (const neighbor of neighbors.get(currentId) ?? []) {
+      if (paths.has(neighbor.member.id)) continue
+      paths.set(neighbor.member.id, [...currentPath, {
+        memberId: neighbor.member.id,
+        relation: neighbor.relation,
+        gender: neighbor.member.gender,
+        birthday: memberBirthdayForAi(neighbor.member),
+      }])
+      queue.push(neighbor.member.id)
+    }
+  }
+  return paths
+}
+
+export const buildKinshipLabelRequest = (
+  viewerMemberId: string,
+  members: MemberRow[],
+  relationships: RelationshipRow[],
+): KinshipLabelRequest => {
+  const viewer = members.find(member => member.id === viewerMemberId)
+  if (!viewer) throw new AppError(400, '当前关联成员不存在', 'LINKED_MEMBER_NOT_FOUND')
+  const viewerBirthday = memberBirthdayForAi(viewer)
+  const contextPaths = buildKinshipContextPaths(viewerMemberId, members, relationships)
+  return {
+    viewer: { id: viewer.id, gender: viewer.gender, birthday: viewerBirthday },
+    targets: members.filter(member => member.id !== viewerMemberId).map(member => {
+      const birthday = memberBirthdayForAi(member)
+      const path = contextPaths.get(member.id) ?? null
+      const comparisonMembers = new Map<string, AiBirthday>([[viewer.id, viewerBirthday]])
+      path?.slice(0, -1).forEach(step => comparisonMembers.set(step.memberId, step.birthday))
+      return {
+        id: member.id,
+        gender: member.gender,
+        birthday,
+        relation: path ? path.map(step => step.relation).join('的') : null,
+        path,
+        ageComparisons: [...comparisonMembers].map(([comparedWithMemberId, referenceBirthday]) => ({
+          comparedWithMemberId,
+          result: compareBirthdaysForAi(birthday, referenceBirthday),
+        })),
+      }
+    }),
+  }
+}
+
 const inferGenerations = (
   memberIds: string[],
   relationships: RelationshipRow[],
@@ -256,19 +360,7 @@ const refreshKinshipLabels = async (
   const targetMembers = members.filter(member => member.id !== viewerMemberId)
   let generatedLabels = new Map<string, string>()
   if (targetMembers.length > 0) {
-    generatedLabels = await generateKinshipLabels({
-      viewerMemberId,
-      members: members.map(member => ({
-        id: member.id,
-        gender: member.gender,
-        birthday: memberBirthdayForAi(member),
-      })),
-      relationships: relationships.map(relationship => ({
-        type: relationship.type,
-        fromMemberId: relationship.from_member_id,
-        toMemberId: relationship.to_member_id,
-      })),
-    })
+    generatedLabels = await generateKinshipLabels(buildKinshipLabelRequest(viewerMemberId, members, relationships))
   }
 
   const timestamp = now()

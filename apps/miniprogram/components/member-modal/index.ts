@@ -90,7 +90,7 @@ Component({
         const hasBirthday = Boolean(member.birthdayType) && member.birthMonth !== null && member.birthDay !== null
         const birthdayText = hasBirthday
           ? `${member.birthYear ? `${member.birthYear}年 ` : ''}${calendar}${member.birthMonth}月${member.birthDay}日`
-          : '还没有记录生日'
+          : '生日待补充'
 
         const metaParts = [isMe ? '我' : member.relation, age === null ? '年龄待补' : `${age} 岁`]
 

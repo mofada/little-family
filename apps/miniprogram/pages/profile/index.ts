@@ -36,7 +36,7 @@ interface RelativeChip {
 const SELF_RELATIONS = ['自己', '我自己']
 
 const birthdayLabel = (member: FamilyMember): string => {
-  if (!member.birthdayType || member.birthMonth === null || member.birthDay === null) return '生日未记'
+  if (!member.birthdayType || member.birthMonth === null || member.birthDay === null) return '生日待补充'
   const calendar = member.birthdayType === 'lunar'
     ? (member.isLeapMonth ? '农历闰' : '农历')
     : '阳历'
@@ -55,7 +55,11 @@ const toChip = (member: FamilyMember, group: string): RelativeChip => ({
 Component({
   data: {
     loading: true,
+    error: '',
     hasFamily: false,
+    emptyTitle: '',
+    emptyDesc: '',
+    emptyAction: '',
     me: null as MeData | null,
     kinGroups: [] as KinGroup[],
     familyId: '',
@@ -90,7 +94,11 @@ Component({
         if (!snapshot) {
           this.setData({
             loading: false,
+            error: '',
             hasFamily: false,
+            emptyTitle: '还没有家庭',
+            emptyDesc: '创建或加入一个家庭，再回来看看。',
+            emptyAction: '去家庭管理',
             me: null,
             kinGroups: [],
             familyId: '',
@@ -104,13 +112,20 @@ Component({
         }
 
         const familyId = snapshot.family.id
+        const canManage = snapshot.family.role === 'owner'
         void this.checkNewJoins(familyId)
         const linkedId = snapshot.family.linkedMemberId ?? ''
 
         if (familyMembers.length === 0) {
           this.setData({
             loading: false,
+            error: '',
             hasFamily: true,
+            emptyTitle: '还没有家人资料',
+            emptyDesc: canManage
+              ? '去生日页添加第一位家人，之后就能在这里看到自己。'
+              : '等家庭所有者录入家人资料。',
+            emptyAction: canManage ? '去生日页添加' : '',
             me: null,
             kinGroups: [],
             familyId,
@@ -123,9 +138,29 @@ Component({
           return
         }
 
-        const me = familyMembers.find(member => member.id === linkedId)
-          ?? familyMembers.find(member => member.relation === '我自己')
-          ?? familyMembers[0]
+        const me = linkedId
+          ? familyMembers.find(member => member.id === linkedId)
+          : undefined
+
+        if (!me) {
+          this.setData({
+            loading: false,
+            error: '',
+            hasFamily: true,
+            emptyTitle: '还没选择你是谁',
+            emptyDesc: '去生日页把某位家人设为「我」，称呼和生日才会按你的视角计算。',
+            emptyAction: '去生日页选择',
+            me: null,
+            kinGroups: [],
+            familyId,
+            familyName: snapshot.family.name,
+            memberCount: familyMembers.length,
+            dayOfYear,
+            linkedMemberId: linkedId,
+            families,
+          })
+          return
+        }
 
         const age = calculateAge(me.birthYear)
         const daysUntilBirthday = getDaysUntilBirthday(me)
@@ -138,7 +173,7 @@ Component({
           name: me.name,
           avatarText: me.name.slice(-1),
           color: getMemberColor(me),
-          meta: [relationText, age === null ? '年龄未知' : `${age} 岁`].filter(Boolean).join(' · '),
+          meta: [relationText, age === null ? '年龄待补' : `${age} 岁`].filter(Boolean).join(' · '),
           birthdayLabel: birthdayLabel(me),
           countdownLabel: daysUntilBirthday === null
             ? ''
@@ -171,10 +206,14 @@ Component({
 
         this.setData({
           loading: false,
+          error: '',
           hasFamily: true,
+          emptyTitle: '',
+          emptyDesc: '',
+          emptyAction: '',
           me: meData,
           kinGroups,
-          familyId,
+          familyId: snapshot.family.id,
           familyName: snapshot.family.name,
           memberCount: familyMembers.length,
           dayOfYear,
@@ -182,9 +221,24 @@ Component({
           families,
         })
       } catch (error) {
-        this.setData({ loading: false })
-        wx.showToast({ title: error instanceof Error ? error.message : '加载失败', icon: 'none' })
+        this.setData({
+          loading: false,
+          error: '网络不稳定或服务暂时不可用，请稍后再试',
+        })
       }
+    },
+
+    retry() {
+      this.setData({ loading: true, error: '' })
+      void this.loadData()
+    },
+
+    onEmptyAction() {
+      if (this.data.hasFamily) {
+        wx.switchTab({ url: '/pages/birthday/index' })
+        return
+      }
+      this.manageFamily()
     },
 
     // 有未读的“有人加入”时在设置入口上点一个红点；进入家庭管理即视为已读。

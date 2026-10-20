@@ -190,8 +190,7 @@ export const generateBirthdayWish = async (prompt: string): Promise<string> => {
 }
 
 export interface KinshipLabelRequest {
-  viewerMemberId: string
-  members: Array<{
+  viewer: {
     id: string
     gender: 'male' | 'female' | 'unknown'
     birthday: {
@@ -201,11 +200,22 @@ export interface KinshipLabelRequest {
       day: number | null
       isLeapMonth: boolean
     } | null
-  }>
-  relationships: Array<{
-    type: 'parent' | 'spouse'
-    fromMemberId: string
-    toMemberId: string
+  }
+  targets: Array<{
+    id: string
+    gender: 'male' | 'female' | 'unknown'
+    birthday: KinshipLabelRequest['viewer']['birthday']
+    relation: string | null
+    path: Array<{
+      memberId: string
+      relation: string
+      gender: 'male' | 'female' | 'unknown'
+      birthday: KinshipLabelRequest['viewer']['birthday']
+    }> | null
+    ageComparisons: Array<{
+      comparedWithMemberId: string
+      result: 'older' | 'younger' | 'same-birthday' | 'unknown'
+    }>
   }>
 }
 
@@ -213,11 +223,11 @@ const KINSHIP_LABEL_TIMEOUT_MS = 120_000
 
 const kinshipSystemPrompt = [
   '你是中文亲属称谓专家。',
-  '请根据输入的家庭成员和关系图，生成“viewerMemberId 对每位其他成员的称呼”。所有亲属关系推导都由你完成。',
-  'members 包含成员 id、gender 和 birthday；birthday 包含历法、年、月、日，未填写时为 null。',
-  'relationships 中 parent 表示 fromMemberId 是 toMemberId 的父母；spouse 表示两人是配偶。',
-  '你必须从 viewerMemberId 沿完整关系图推导称呼，不能只按年龄、成员顺序或单段关系判断。无法从关系图连通的成员返回“亲友”。',
-  '只返回 JSON 对象，key 是 viewer 之外的成员 id，value 是 viewer 对该成员的称呼。',
+  '输入已经按每位目标成员组装好 viewer 到 target 的关系链，你只需根据 targets 生成 viewer 对每位 target 的称呼。',
+  'target.relation 是可直接阅读的关系链，例如“爸爸的爸爸”。target.path 列出链上每一步的成员、关系、性别和生日。',
+  'target.ageComparisons 是 target 与 viewer 或关系链上其他成员的出生先后比较：older 表示 target 年长，younger 表示 target 年幼，unknown 表示缺少年份或无法比较。',
+  'relation 或 path 为 null 时返回“亲友”。不要自行改写或猜测输入的关系链。',
+  '只返回 JSON 对象，key 是 target id，value 是 viewer 对该 target 的称呼。',
   '最终回答必须写在 message.content 中，不能只输出推理内容。',
   '称呼必须使用规范、正式的书面称谓，例如：兄、弟、姐、妹、伯父、叔父、姑母、舅父、舅母、姨母、婶母、堂兄、表姐、连襟、妯娌。',
   '仅直系亲属保留家庭常用称呼：爸爸、妈妈、爷爷、奶奶、外公、外婆。',
@@ -231,16 +241,21 @@ const kinshipMaxTokens = (targetCount: number): number =>
   Math.min(4000, Math.max(1200, targetCount * 100))
 
 const kinshipRequestSummary = (input: KinshipLabelRequest): Record<string, unknown> => ({
-  viewerMemberId: input.viewerMemberId,
-  memberCount: input.members.length,
-  targetCount: Math.max(0, input.members.length - 1),
-  relationshipCount: input.relationships.length,
-  missingBirthYearCount: input.members.filter(member => member.birthday?.year == null).length,
+  viewerMemberId: input.viewer.id,
+  targetCount: input.targets.length,
+  missingPathCount: input.targets.filter(target => !target.path).length,
+  missingBirthYearCount: input.targets.filter(target => target.birthday?.year == null).length,
 })
 
 const kinshipBatches = (
   input: KinshipLabelRequest,
-): KinshipLabelRequest[] => [input]
+): KinshipLabelRequest[] => {
+  const batches: KinshipLabelRequest[] = []
+  for (let index = 0; index < input.targets.length; index += 1000) {
+    batches.push({ ...input, targets: input.targets.slice(index, index + 1000) })
+  }
+  return batches
+}
 
 const parseJsonObject = (content: string): Record<string, unknown> => {
   try {
@@ -280,8 +295,7 @@ export const generateKinshipLabels = async (
 
   const batches = kinshipBatches(input)
   for (const [batchIndex, batch] of batches.entries()) {
-    const targetMembers = batch.members.filter(member => member.id !== batch.viewerMemberId)
-    const maxTokens = kinshipMaxTokens(targetMembers.length)
+    const maxTokens = kinshipMaxTokens(batch.targets.length)
     const startedAt = Date.now()
     logDeepSeekInfo('kinship_batch_request', {
       batchIndex: batchIndex + 1,
@@ -301,7 +315,7 @@ export const generateKinshipLabels = async (
         true,
       )
       const parsed = parseJsonObject(content)
-      targetMembers.forEach(target => {
+      batch.targets.forEach(target => {
         const value = parsed[target.id]
         if (typeof value !== 'string') return
         const label = sanitizeGeneratedLabel(value)
@@ -311,8 +325,8 @@ export const generateKinshipLabels = async (
       logDeepSeekInfo('kinship_batch_success', {
         batchIndex: batchIndex + 1,
         batchCount: batches.length,
-        targetCount: targetMembers.length,
-        labelCount: targetMembers.filter(target => labels.has(target.id)).length,
+        targetCount: batch.targets.length,
+        labelCount: batch.targets.filter(target => labels.has(target.id)).length,
         durationMs: Date.now() - startedAt,
       })
     } catch (error) {
@@ -320,7 +334,7 @@ export const generateKinshipLabels = async (
         code: 'KINSHIP_LABEL_GENERATION_FAILED',
         batchIndex: batchIndex + 1,
         batchCount: batches.length,
-        targetCount: targetMembers.length,
+        targetCount: batch.targets.length,
         requestSummary: kinshipRequestSummary(batch),
         durationMs: Date.now() - startedAt,
         error: describeError(error),

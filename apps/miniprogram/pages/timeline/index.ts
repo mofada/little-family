@@ -1,4 +1,4 @@
-import { calculateAge, familyMembers, getMemberColor } from '../../utils/familyData'
+import { calculateAge, familyMembers } from '../../utils/familyData'
 import { ensureFamilyData } from '../../services/familyStore'
 import type { FamilyMember } from '../../types/family'
 
@@ -8,9 +8,7 @@ interface TimelineEvent {
   id: string
   memberJson: string
   name: string
-  avatarText: string
   relation: string
-  color: string
   yearLabel: string
   yearUnit: string
   birthdayLabel: string
@@ -49,9 +47,7 @@ const toEvent = (member: FamilyMember): TimelineEvent => {
     id: member.id,
     memberJson: JSON.stringify(member),
     name: member.name,
-    avatarText: member.name.slice(-1),
     relation: member.relation || '家庭成员',
-    color: getMemberColor(member),
     yearLabel: member.birthYear === null ? '—' : String(member.birthYear),
     yearUnit: member.birthYear === null ? '' : '年',
     birthdayLabel: getBirthdayLabel(member),
@@ -89,6 +85,7 @@ const buildEmptyCopy = (
 Component({
   data: {
     loading: true,
+    error: '',
     needsFamily: false,
     keyword: '',
     filter: 'all' as MemberFilter,
@@ -128,6 +125,7 @@ Component({
         if (!snapshot) {
           this.setData({
             loading: false,
+            error: '',
             needsFamily: true,
             hiddenCount: 0,
             summaryLabel: '',
@@ -199,15 +197,18 @@ Component({
         const firstYear = years.length > 0 ? Math.min(...years) : null
         const lastYear = years.length > 0 ? Math.max(...years) : null
         const totalMembers = familyMembers.length
-        const summaryLabel = firstYear === null || lastYear === null
+        const summaryLabel = keyword || filter !== 'all'
           ? ''
-          : firstYear === lastYear
-            ? `${firstYear} 年 · ${totalMembers} 位成员`
-            : `${firstYear}—${lastYear} · 跨越 ${lastYear - firstYear} 年 · ${totalMembers} 位成员`
+          : firstYear === null || lastYear === null
+            ? ''
+            : firstYear === lastYear
+              ? `${firstYear} 年 · ${totalMembers} 位成员`
+              : `${firstYear}—${lastYear} · 跨越 ${lastYear - firstYear} 年 · ${totalMembers} 位成员`
         const emptyCopy = buildEmptyCopy(keyword, filter, totalMembers, membersWithoutYear.length)
 
         this.setData({
           loading: false,
+          error: '',
           needsFamily: false,
           hiddenCount: membersWithoutYear.length,
           summaryLabel,
@@ -219,9 +220,19 @@ Component({
           groups,
         })
       } catch (error) {
-        this.setData({ loading: false })
-        wx.showToast({ title: error instanceof Error ? error.message : '加载失败', icon: 'none' })
+        this.setData({
+          loading: false,
+          error: '网络不稳定或服务暂时不可用，请稍后再试',
+          groups: [],
+          summaryLabel: '',
+          hiddenCount: 0,
+        })
       }
+    },
+
+    retry() {
+      this.setData({ loading: true, error: '' })
+      void this.buildTimeline()
     },
 
     onSearch(e: WechatMiniprogram.Input) {

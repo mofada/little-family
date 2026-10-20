@@ -10,9 +10,9 @@ export const replaceFamilyMembers = (members: FamilyMember[]): void => {
 }
 
 export const getMemberColor = (member: Pick<FamilyMember, 'gender'>): string => {
-  if (member.gender === 'male') return '#4f7fbf'
-  if (member.gender === 'female') return '#d47586'
-  return '#8b817d'
+  if (member.gender === 'male') return '#7a5c4e'
+  if (member.gender === 'female') return '#b5564c'
+  return '#a99c96'
 }
 
 // 农历生日转指定农历年份的公历日期

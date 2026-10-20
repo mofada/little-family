@@ -10,6 +10,17 @@
 
       <view class="print-rule"></view>
 
+      <page-state wx:if="{{loading}}" mode="loading" desc="正在加载家庭数据…" />
+      <page-state
+        wx:elif="{{error}}"
+        mode="error"
+        title="没能读到家庭数据"
+        desc="{{error}}"
+        actionText="重试"
+        bind:action="retry"
+      />
+
+      <block wx:else>
       <view class="toolbar">
         <view class="toolbar__row">
           <view class="search-box">
@@ -50,7 +61,7 @@
               <text class="search-result__name">{{item.name}}</text>
               <text class="search-result__meta">{{item.relation}} · {{item.meta}}</text>
             </view>
-            <view class="chevron"></view>
+            <text class="chevron">›</text>
           </view>
         </view>
       </view>
@@ -190,20 +201,23 @@
                   <text class="member-entry__age"> · {{item.ageLabel}}</text>
                 </view>
               </view>
-              <view class="chevron"></view>
+              <text class="chevron">›</text>
             </view>
           </view>
         </view>
       </block>
 
-      <view wx:else class="empty-state">
-        <text class="empty-state__title">族谱里还没有成员</text>
-        <text class="empty-state__subtitle">添加家人后，就能从这里浏览家庭关系</text>
-      </view>
+      <page-state
+        wx:else
+        mode="empty"
+        title="族谱里还没有成员"
+        desc="添加家人后，就能从这里浏览家庭关系"
+      />
 
       <view wx:if="{{familyName}}" class="print-colophon">
         <text>{{familyName}} · {{memberCount}} 位家人 · 第 {{dayOfYear}} 天</text>
       </view>
+      </block>
     </view>
   </scroll-view>
 </view>

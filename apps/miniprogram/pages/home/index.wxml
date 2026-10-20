@@ -3,21 +3,25 @@
 
   <scroll-view class="page__list" scroll-y type="list" enhanced show-scrollbar="{{false}}">
 
-    <view wx:if="{{loading}}" class="state">
-      <text class="state__desc">正在加载家庭数据…</text>
-    </view>
+    <page-state wx:if="{{loading}}" mode="loading" desc="正在加载家庭数据…" />
 
-    <view wx:elif="{{error}}" class="state">
-      <text class="state__title">没能读到家庭数据</text>
-      <text class="state__desc">{{error}}</text>
-      <view class="state__button" bindtap="retry" hover-class="tap-pressed">重试</view>
-    </view>
+    <page-state
+      wx:elif="{{error}}"
+      mode="error"
+      title="没能读到家庭数据"
+      desc="网络不稳定或服务暂时不可用，请稍后再试"
+      actionText="重试"
+      bind:action="retry"
+    />
 
-    <view wx:elif="{{needsFamily}}" class="state">
-      <text class="state__title">还没有家庭</text>
-      <text class="state__desc">设置完成后，家人的生日会显示在这里</text>
-      <view class="state__button" bindtap="goFamilyManage" hover-class="tap-pressed">开始设置</view>
-    </view>
+    <page-state
+      wx:elif="{{needsFamily}}"
+      mode="empty"
+      title="还没有家庭"
+      desc="设置完成后，家人的生日会显示在这里"
+      actionText="开始设置"
+      bind:action="goFamilyManage"
+    />
 
     <block wx:else>
       <view class="sheet">
@@ -91,18 +95,27 @@
           <text class="entry__badge {{item.isUrgent ? 'entry__badge--soon' : ''}}">{{item.badge}}</text>
         </view>
 
-        <view wx:if="{{upcomingCount === 0}}" class="entry entry--empty">
+        <view wx:if="{{noMembers}}" class="entry entry--empty entry--cta">
+          <text>{{canManage ? '还没有家人，先添加第一位' : '还没有家人资料'}}</text>
+          <view
+            wx:if="{{canManage}}"
+            class="action action--primary"
+            bindtap="goBirthday"
+            hover-class="tap-pressed"
+          >去添加</view>
+        </view>
+        <view wx:elif="{{upcomingCount === 0}}" class="entry entry--empty">
           <text>接下来 30 天没有生日</text>
         </view>
       </view>
 
-      <block wx:if="{{reminderConfigured || missingCount > 0}}">
+      <block wx:if="{{!noMembers && (reminderConfigured || missingCount > 0)}}">
         <view class="rule"></view>
 
         <view wx:if="{{reminderConfigured}}" class="notice">
           <view class="notice__main">
             <text class="notice__label">生日提醒</text>
-            <text class="notice__detail">{{reminderEnabled ? '已开启 · 每天 8:00 推送' : '尚未开启'}}</text>
+            <text class="notice__detail">{{reminderEnabled ? '已开启 · 8:00 推送' : '尚未开启'}}</text>
           </view>
           <view
             wx:if="{{reminderEnabled}}"
@@ -135,7 +148,7 @@
 
       <view class="rule rule--footer"></view>
 
-      <view class="action action--wide" bindtap="goBirthday" hover-class="tap-pressed">
+      <view wx:if="{{!noMembers}}" class="action action--wide" bindtap="goBirthday" hover-class="tap-pressed">
         <text class="action__label">查看全部生日</text>
         <text class="action__meta">{{monthRemaining > 0 ? '本月还有 ' + monthRemaining + ' 位' : ''}}</text>
       </view>

@@ -55,6 +55,7 @@ Component({
     todayState: '',
     todayPeople: [] as TodayPerson[],
     todayEmpty: true,
+    noMembers: false,
     colophon: '',
     upcoming: [] as UpcomingPerson[],
     upcomingCount: 0,
@@ -91,6 +92,7 @@ Component({
           this.setData({
             loading: false,
             needsFamily: true,
+            noMembers: false,
             monthLabel,
             dayNumber,
             weekdayLabel,
@@ -105,10 +107,13 @@ Component({
         const missingCount = familyMembers.filter(member => !hasBirthday(member)).length
         const monthRemaining = familyMembers
           .filter(member => hasBirthday(member))
-          .map(member => getNextBirthdayDate(member))
-          .filter((next): next is Date => next !== null
-            && next.getFullYear() === now.getFullYear()
-            && next.getMonth() === now.getMonth()).length
+          .filter(member => {
+            const days = getDaysUntilBirthday(member)
+            const next = getNextBirthdayDate(member)
+            return days !== null && days > 0 && next !== null
+              && next.getFullYear() === now.getFullYear()
+              && next.getMonth() === now.getMonth()
+          }).length
 
         const todayPeople: TodayPerson[] = todayMembers.map(member => {
           const age = calculateAge(member.birthYear)
@@ -136,15 +141,19 @@ Component({
           }
         })
 
-        const todayState = todayPeople.length > 0
-          ? `今天 · ${todayPeople.length} 位生日`
-          : '今天没有生日'
+        const noMembers = familyMembers.length === 0
+        const todayState = noMembers
+          ? '还没有家人'
+          : todayPeople.length > 0
+            ? `今天 · ${todayPeople.length} 位生日`
+            : '今天没有生日'
         const colophon = `${snapshot.family.name} · ${familyMembers.length} 位家人 · 第 ${dayOfYear} 天`
 
         this.setData({
           loading: false,
           error: '',
           needsFamily: false,
+          noMembers,
           familyName: snapshot.family.name,
           canManage: role === 'owner',
           monthLabel,

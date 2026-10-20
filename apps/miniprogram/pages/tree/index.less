@@ -80,7 +80,7 @@
 }
 
 .search-placeholder {
-  color: @ink-faint;
+  color: @ink-soft;
 }
 
 .search-box__clear {
@@ -91,7 +91,7 @@
   font-size: 24rpx;
   line-height: 40rpx;
   text-align: center;
-  color: @ink-faint;
+  color: @ink-soft;
 }
 
 .toolbar__meta {
@@ -99,7 +99,7 @@
   margin-top: 14rpx;
   font-size: 19rpx;
   letter-spacing: 1rpx;
-  color: @ink-faint;
+  color: @ink-soft;
 }
 
 /* 搜索结果直接排成账页行，不浮层 */
@@ -110,7 +110,7 @@
 .search-empty {
   padding: 24rpx 0;
   font-size: 24rpx;
-  color: @ink-faint;
+  color: @ink-soft;
 }
 
 .search-result {
@@ -128,6 +128,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  .serif();
   font-size: 28rpx;
   font-weight: 600;
   color: @ink;
@@ -145,12 +146,10 @@
 }
 
 .chevron {
-  width: 12rpx;
-  height: 12rpx;
   flex: none;
-  border-top: 2rpx solid @ink-faint;
-  border-right: 2rpx solid @ink-faint;
-  transform: rotate(45deg);
+  font-size: 28rpx;
+  line-height: 1;
+  color: @ink-soft;
 }
 
 /* 中心人物：一行大字，整行打开资料 */
@@ -202,7 +201,7 @@
   flex: none;
   font-size: 19rpx;
   letter-spacing: 1rpx;
-  color: @ink-faint;
+  color: @ink-soft;
 }
 
 /* 三代账页：固定的 96rpx 辈分栏，右边人名自己换行 */
@@ -229,7 +228,7 @@
   font-size: 19rpx;
   letter-spacing: 2rpx;
   line-height: 1.4;
-  color: @ink-faint;
+  color: @ink-soft;
 }
 
 .ledger__people {
@@ -318,7 +317,7 @@
   flex: none;
   font-size: 19rpx;
   letter-spacing: 1rpx;
-  color: @ink-faint;
+  color: @ink-soft;
 }
 
 .generation-tabs {
@@ -334,6 +333,7 @@
 }
 
 .chip {
+  flex: none;
   display: inline-flex;
   align-items: center;
   gap: 8rpx;
@@ -347,7 +347,12 @@
   color: @ink-soft;
 }
 
+/* 1rpx 描边只有 0.5px 宽，iOS 上对齐设备像素时整条右边（含右上、右下圆角）
+   会被抹成 0 宽，表现为“选中的那一代右边框不见了”。选中态改用 2rpx 实线，
+   并把左右内边距各让出 1rpx，使 chip 尺寸与未选中时保持一致，不会左右跳动。 */
 .chip--active {
+  padding: 0 19rpx;
+  border-width: 2rpx;
   border-color: @ink;
   color: @ink;
   font-weight: 600;
@@ -356,7 +361,7 @@
 .chip__count {
   font-size: 19rpx;
   letter-spacing: 1rpx;
-  color: @ink-faint;
+  color: @ink-soft;
 }
 
 .chip--active .chip__count {
@@ -380,7 +385,7 @@
   font-size: 31rpx;
   font-weight: 600;
   line-height: 1;
-  color: @ink-faint;
+  color: @ink-soft;
 }
 
 .member-entry--active .member-entry__num {
@@ -428,35 +433,10 @@
 .member-entry__age {
   font-size: 19rpx;
   letter-spacing: 1rpx;
-  color: @ink-faint;
-}
-
-/* 空族谱：一句话，不用图标卡 */
-.empty-state {
-  min-height: 600rpx;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 60rpx 0;
-  text-align: center;
-}
-
-.empty-state__title {
-  .serif();
-  font-size: 38rpx;
-  font-weight: 600;
-  letter-spacing: 2rpx;
-  color: @ink;
-}
-
-.empty-state__subtitle {
-  margin-top: 14rpx;
-  max-width: 520rpx;
-  font-size: 24rpx;
-  line-height: 1.7;
   color: @ink-soft;
 }
+
+/* 空族谱由 page-state 承担 */
 
 .row--pressed {
   opacity: 0.72;
