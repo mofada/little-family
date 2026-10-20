@@ -1,0 +1,12 @@
+<view class="page-state page-state--{{mode}}">
+  <text wx:if="{{title}}" class="page-state__title">{{title}}</text>
+  <text wx:if="{{desc}}" class="page-state__desc">{{desc}}</text>
+  <view
+    wx:if="{{actionText}}"
+    class="page-state__action"
+    bindtap="onAction"
+    hover-class="page-state__action--pressed"
+    aria-role="button"
+    aria-label="{{actionText}}"
+  >{{actionText}}</view>
+</view>
