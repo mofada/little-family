@@ -48,6 +48,13 @@ const wechatWebLoginRateLimit = rateLimit({
   legacyHeaders: false,
 })
 
+const invitationPreviewRateLimit = rateLimit({
+  windowMs: 60_000,
+  limit: 30,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+})
+
 const routeParam = (request: Request, name: string): string => {
   const value = request.params[name]
   if (typeof value !== 'string') throw new AppError(400, `缺少路径参数 ${name}`)
@@ -625,6 +632,35 @@ app.post('/api/auth/wechat-web', wechatWebLoginRateLimit, async (request, respon
   response.json(createSession(user.id))
 })
 
+app.get('/api/invitations/:code/preview', invitationPreviewRateLimit, (request, response) => {
+  const timestamp = now()
+  const invitation = db.prepare(`
+    SELECT families.name AS familyName, invitations.role,
+           invitations.max_uses AS maxUses, invitations.used_count AS usedCount,
+           invitations.expires_at AS expiresAt, invitations.revoked_at AS revokedAt
+    FROM invitations
+    JOIN families ON families.id = invitations.family_id
+    WHERE invitations.code_hash = ?
+  `).get(sha256(routeParam(request, 'code'))) as {
+    familyName: string
+    role: FamilyRole
+    maxUses: number
+    usedCount: number
+    expiresAt: string
+    revokedAt: string | null
+  } | undefined
+  if (!invitation || invitation.revokedAt || invitation.expiresAt <= timestamp
+    || invitation.usedCount >= invitation.maxUses) {
+    throw new AppError(404, '邀请码不存在或已失效', 'INVITATION_INVALID')
+  }
+  response.json({
+    familyName: invitation.familyName,
+    role: invitation.role,
+    remainingUses: invitation.maxUses - invitation.usedCount,
+    expiresAt: invitation.expiresAt,
+  })
+})
+
 app.use('/api', requireAuth as never)
 
 app.post('/api/auth/web-login-code', (request: Request, response) => {
@@ -1110,25 +1146,62 @@ app.post('/api/families/:familyId/invitations', (request: Request, response) => 
   const familyId = routeParam(request, 'familyId')
   requireFamilyRole(authUser.id, familyId, 'owner')
   const input = invitationSchema.parse(request.body)
+  const invitationId = randomUUID()
   const code = randomBytes(9).toString('base64url')
   const expiresAt = new Date(Date.now() + input.expiresInHours * 3600000).toISOString()
   db.prepare(`
     INSERT INTO invitations
       (id, family_id, code_hash, role, max_uses, expires_at, created_by, created_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(randomUUID(), familyId, sha256(code), input.role, input.maxUses, expiresAt, authUser.id, now())
-  audit(familyId, authUser.id, 'create', 'invitation', familyId, { role: input.role, expiresAt })
-  response.status(201).json({ code, expiresAt, role: input.role, maxUses: input.maxUses })
+  `).run(invitationId, familyId, sha256(code), input.role, input.maxUses, expiresAt, authUser.id, now())
+  audit(familyId, authUser.id, 'create', 'invitation', invitationId, { role: input.role, expiresAt })
+  response.status(201).json({ invitationId, code, expiresAt, role: input.role, maxUses: input.maxUses })
+})
+
+app.delete('/api/families/:familyId/invitations/:invitationId', (request: Request, response) => {
+  const { authUser } = request as AuthenticatedRequest
+  const familyId = routeParam(request, 'familyId')
+  const invitationId = routeParam(request, 'invitationId')
+  requireFamilyRole(authUser.id, familyId, 'owner')
+  const revokedAt = now()
+  const result = db.prepare(`
+    UPDATE invitations SET revoked_at = ?
+    WHERE id = ? AND family_id = ? AND revoked_at IS NULL
+  `).run(revokedAt, invitationId, familyId)
+  if (Number(result.changes) !== 1) {
+    throw new AppError(404, '邀请不存在或已经作废', 'INVITATION_NOT_FOUND')
+  }
+  audit(familyId, authUser.id, 'revoke', 'invitation', invitationId)
+  response.status(204).send()
+})
+
+app.get('/api/families/:familyId/joins/summary', (request: Request, response) => {
+  const { authUser } = request as AuthenticatedRequest
+  const familyId = routeParam(request, 'familyId')
+  requireFamilyRole(authUser.id, familyId, 'viewer')
+  const since = new Date(Date.now() - 7 * 86400000).toISOString()
+  const summary = db.prepare(`
+    SELECT COUNT(*) AS recentCount, MAX(family_users.joined_at) AS lastJoinedAt
+    FROM family_users
+    JOIN families ON families.id = family_users.family_id
+    WHERE family_users.family_id = ?
+      AND family_users.user_id <> families.owner_user_id
+      AND family_users.joined_at >= ?
+  `).get(familyId, since) as { recentCount: number; lastJoinedAt: string | null }
+  response.json(summary)
 })
 
 app.post('/api/invitations/:code/accept', (request: Request, response) => {
   const { authUser } = request as AuthenticatedRequest
   const invitation = db.prepare(`
-    SELECT id, family_id, role, max_uses, used_count, expires_at FROM invitations WHERE code_hash = ?
+    SELECT id, family_id, role, max_uses, used_count, expires_at, revoked_at
+    FROM invitations WHERE code_hash = ?
   `).get(sha256(routeParam(request, 'code'))) as unknown as {
-    id: string; family_id: string; role: FamilyRole; max_uses: number; used_count: number; expires_at: string
+    id: string; family_id: string; role: FamilyRole; max_uses: number; used_count: number
+    expires_at: string; revoked_at: string | null
   } | undefined
-  if (!invitation || invitation.expires_at <= now() || invitation.used_count >= invitation.max_uses) {
+  if (!invitation || invitation.revoked_at || invitation.expires_at <= now()
+    || invitation.used_count >= invitation.max_uses) {
     throw new AppError(404, '邀请码不存在或已失效', 'INVITATION_INVALID')
   }
   transaction(() => {

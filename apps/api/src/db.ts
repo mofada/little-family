@@ -148,6 +148,7 @@ db.exec(`
     max_uses INTEGER NOT NULL DEFAULT 1,
     used_count INTEGER NOT NULL DEFAULT 0,
     expires_at TEXT NOT NULL,
+    revoked_at TEXT,
     created_by TEXT NOT NULL REFERENCES users(id),
     created_at TEXT NOT NULL
   );
@@ -290,4 +291,13 @@ db.prepare('INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES
   .run(new Date().toISOString())
 
 db.prepare('INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (5, ?)')
+  .run(new Date().toISOString())
+
+const invitationColumns = db.prepare('PRAGMA table_info(invitations)').all() as unknown as Array<{
+  name: string
+}>
+if (!invitationColumns.some(column => column.name === 'revoked_at')) {
+  db.exec('ALTER TABLE invitations ADD COLUMN revoked_at TEXT;')
+}
+db.prepare('INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (6, ?)')
   .run(new Date().toISOString())
