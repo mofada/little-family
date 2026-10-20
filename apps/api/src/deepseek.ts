@@ -190,32 +190,9 @@ export const generateBirthdayWish = async (prompt: string): Promise<string> => {
 }
 
 export interface KinshipLabelRequest {
-  viewer: {
-    id: string
-    gender: 'male' | 'female' | 'unknown'
-    birthday: {
-      calendar: 'solar' | 'lunar' | null
-      year: number | null
-      month: number | null
-      day: number | null
-      isLeapMonth: boolean
-    } | null
-  }
   targets: Array<{
     id: string
-    gender: 'male' | 'female' | 'unknown'
-    birthday: KinshipLabelRequest['viewer']['birthday']
     relation: string | null
-    path: Array<{
-      memberId: string
-      relation: string
-      gender: 'male' | 'female' | 'unknown'
-      birthday: KinshipLabelRequest['viewer']['birthday']
-    }> | null
-    ageComparisons: Array<{
-      comparedWithMemberId: string
-      result: 'older' | 'younger' | 'same-birthday' | 'unknown'
-    }>
   }>
 }
 
@@ -223,15 +200,15 @@ const KINSHIP_LABEL_TIMEOUT_MS = 120_000
 
 const kinshipSystemPrompt = [
   '你是中文亲属称谓专家。',
-  '输入已经按每位目标成员组装好 viewer 到 target 的关系链，你只需根据 targets 生成 viewer 对每位 target 的称呼。',
-  'target.relation 是可直接阅读的关系链，例如“爸爸的爸爸”。target.path 列出链上每一步的成员、关系、性别和生日。',
-  'target.ageComparisons 是 target 与 viewer 或关系链上其他成员的出生先后比较：older 表示 target 年长，younger 表示 target 年幼，unknown 表示缺少年份或无法比较。',
-  'relation 或 path 为 null 时返回“亲友”。不要自行改写或猜测输入的关系链。',
+  '输入已经按每位目标成员组装好从当前用户出发的关系链，你只需根据 targets 生成称呼。',
+  'target 只包含 id 和 relation。relation 是可直接阅读的关系链，例如“爸爸的爸爸”或“爸爸的爸爸的儿子（比爸爸年长）”。',
+  '括号内的“比我年长/年幼”或“比某位链上亲属年长/年幼”是后端已计算好的长幼信息，必须据此区分兄弟姐妹、伯父叔父等称呼。',
+  '如果关系链标注“长幼未知”且该称呼必须区分长幼，返回“亲友”。relation 为 null 时也返回“亲友”。',
   '只返回 JSON 对象，key 是 target id，value 是 viewer 对该 target 的称呼。',
   '最终回答必须写在 message.content 中，不能只输出推理内容。',
   '称呼必须使用规范、正式的书面称谓，例如：兄、弟、姐、妹、伯父、叔父、姑母、舅父、舅母、姨母、婶母、堂兄、表姐、连襟、妯娌。',
+  '同辈亲兄弟姐妹必须输出“兄、弟、姐、妹”，不要输出“哥哥、弟弟、姐姐、妹妹”。',
   '仅直系亲属保留家庭常用称呼：爸爸、妈妈、爷爷、奶奶、外公、外婆。',
-  '需要区分长幼时必须比较关系中相关两人的 birthday：先比年，再比月日，较早出生者年长。只要其中一人没有年份，就对该目标返回“亲友”；同年但缺少月日、或生日完全相同时也返回“亲友”，不得猜测。',
   '表哥、堂哥、表姐、堂姐的子女不能称为弟弟或妹妹，应称表侄、表侄女、堂侄、堂侄女等下一辈称呼。',
   '不要输出带斜杠、“或”、“的”的不确定或描述性称呼；无法确定时只返回“亲友”。',
   '不要输出解释、Markdown 或代码块。',
@@ -241,10 +218,9 @@ const kinshipMaxTokens = (targetCount: number): number =>
   Math.min(4000, Math.max(1200, targetCount * 100))
 
 const kinshipRequestSummary = (input: KinshipLabelRequest): Record<string, unknown> => ({
-  viewerMemberId: input.viewer.id,
   targetCount: input.targets.length,
-  missingPathCount: input.targets.filter(target => !target.path).length,
-  missingBirthYearCount: input.targets.filter(target => target.birthday?.year == null).length,
+  missingRelationCount: input.targets.filter(target => !target.relation).length,
+  unknownAgeCount: input.targets.filter(target => target.relation?.includes('长幼未知')).length,
 })
 
 const kinshipBatches = (

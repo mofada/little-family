@@ -228,23 +228,36 @@ export const buildKinshipLabelRequest = (
   if (!viewer) throw new AppError(400, '当前关联成员不存在', 'LINKED_MEMBER_NOT_FOUND')
   const viewerBirthday = memberBirthdayForAi(viewer)
   const contextPaths = buildKinshipContextPaths(viewerMemberId, members, relationships)
+
+  const relationText = (path: AiPathStep[]): string => {
+    let generation = 0
+    const previous = [{ generation: 0, label: '我', birthday: viewerBirthday }]
+    return path.map(step => {
+      if (['爸爸', '妈妈', '父母'].includes(step.relation)) generation -= 1
+      if (['儿子', '女儿', '子女'].includes(step.relation)) generation += 1
+      let relation = step.relation
+      if (['儿子', '女儿', '子女'].includes(step.relation)) {
+        const reference = [...previous].reverse().find(item => item.generation === generation)
+        if (reference) {
+          const comparison = compareBirthdaysForAi(step.birthday, reference.birthday)
+          const comparisonText = comparison === 'older' ? '年长'
+            : comparison === 'younger' ? '年幼'
+              : comparison === 'same-birthday' ? '同龄'
+                : '长幼未知'
+          relation += `（比${reference.label}${comparisonText}）`
+        }
+      }
+      previous.push({ generation, label: step.relation, birthday: step.birthday })
+      return relation
+    }).join('的')
+  }
+
   return {
-    viewer: { id: viewer.id, gender: viewer.gender, birthday: viewerBirthday },
     targets: members.filter(member => member.id !== viewerMemberId).map(member => {
-      const birthday = memberBirthdayForAi(member)
       const path = contextPaths.get(member.id) ?? null
-      const comparisonMembers = new Map<string, AiBirthday>([[viewer.id, viewerBirthday]])
-      path?.slice(0, -1).forEach(step => comparisonMembers.set(step.memberId, step.birthday))
       return {
         id: member.id,
-        gender: member.gender,
-        birthday,
-        relation: path ? path.map(step => step.relation).join('的') : null,
-        path,
-        ageComparisons: [...comparisonMembers].map(([comparedWithMemberId, referenceBirthday]) => ({
-          comparedWithMemberId,
-          result: compareBirthdaysForAi(birthday, referenceBirthday),
-        })),
+        relation: path ? relationText(path) : null,
       }
     }),
   }
