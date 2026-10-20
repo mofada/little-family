@@ -130,79 +130,20 @@ interface KinshipLabelRow {
   label: string
 }
 
-const normalizeKinshipLabel = (label: string): string => {
-  const compact = label.trim().replace(/[，。,.；;：:\s]/g, '')
-  if (!compact) return ''
-  return compact
-    .replace(/连襟/g, '姐夫')
-    .replace(/妯娌/g, '嫂子')
-    .replace(/^姻亲$/, '亲人')
-    .slice(0, 20)
-}
+const FALLBACK_KINSHIP_LABEL = '亲友'
+const sanitizeKinshipLabel = (label: string): string =>
+  label.trim().replace(/[`“”"'，。,.;；:：\s]/g, '').slice(0, 20)
 
-const sanitizeKinshipLabel = (label: string): string => normalizeKinshipLabel(label)
-
-const genderedParentRelation = (member: MemberRow): string => {
-  if (member.gender === 'male') return '爸爸'
-  if (member.gender === 'female') return '妈妈'
-  return '父母'
-}
-
-const genderedChildRelation = (member: MemberRow): string => {
-  if (member.gender === 'male') return '儿子'
-  if (member.gender === 'female') return '女儿'
-  return '子女'
-}
-
-const genderedSpouseRelation = (member: MemberRow): string => {
-  if (member.gender === 'male') return '丈夫'
-  if (member.gender === 'female') return '妻子'
-  return '配偶'
-}
-
-const buildKinshipPaths = (
-  viewerMemberId: string,
-  members: MemberRow[],
-  relationships: RelationshipRow[],
-): Map<string, string | null> => {
-  const memberById = new Map(members.map(member => [member.id, member]))
-  const neighbors = new Map<string, Array<{ member: MemberRow; relation: string }>>()
-  members.forEach(member => neighbors.set(member.id, []))
-
-  relationships.forEach(relationship => {
-    const fromMember = memberById.get(relationship.from_member_id)
-    const toMember = memberById.get(relationship.to_member_id)
-    if (!fromMember || !toMember) return
-
-    if (relationship.type === 'parent') {
-      neighbors.get(toMember.id)?.push({ member: fromMember, relation: genderedParentRelation(fromMember) })
-      neighbors.get(fromMember.id)?.push({ member: toMember, relation: genderedChildRelation(toMember) })
-      return
-    }
-
-    neighbors.get(fromMember.id)?.push({ member: toMember, relation: genderedSpouseRelation(toMember) })
-    neighbors.get(toMember.id)?.push({ member: fromMember, relation: genderedSpouseRelation(fromMember) })
-  })
-
-  const paths = new Map<string, string | null>()
-  paths.set(viewerMemberId, '自己')
-  const queue: Array<{ memberId: string; steps: string[] }> = [{ memberId: viewerMemberId, steps: [] }]
-
-  while (queue.length > 0) {
-    const current = queue.shift()!
-    for (const neighbor of neighbors.get(current.memberId) ?? []) {
-      if (paths.has(neighbor.member.id)) continue
-      const nextSteps = [...current.steps, neighbor.relation]
-      paths.set(neighbor.member.id, nextSteps.join('的'))
-      queue.push({ memberId: neighbor.member.id, steps: nextSteps })
-    }
+const memberBirthdayForAi = (member: MemberRow) => {
+  if (member.birth_year === null && member.birthday_type === null
+    && member.birth_month === null && member.birth_day === null) return null
+  return {
+    calendar: member.birthday_type,
+    year: member.birth_year,
+    month: member.birth_month,
+    day: member.birth_day,
+    isLeapMonth: member.is_leap_month === 1,
   }
-
-  members.forEach(member => {
-    if (!paths.has(member.id)) paths.set(member.id, null)
-  })
-
-  return paths
 }
 
 const inferGenerations = (
@@ -275,7 +216,7 @@ const clearFamilyKinshipLabels = (familyId: string): void => {
 
 const fallbackKinshipLabel = (viewerMemberId: string | null | undefined, member: MemberRow): string => {
   if (viewerMemberId && member.id === viewerMemberId) return '自己'
-  return member.relation_label || '亲人'
+  return member.relation_label ? sanitizeKinshipLabel(member.relation_label) : FALLBACK_KINSHIP_LABEL
 }
 
 const loadKinshipLabels = async (
@@ -315,18 +256,17 @@ const refreshKinshipLabels = async (
   const targetMembers = members.filter(member => member.id !== viewerMemberId)
   let generatedLabels = new Map<string, string>()
   if (targetMembers.length > 0) {
-    const viewer = members.find(member => member.id === viewerMemberId)!
-    const kinshipPaths = buildKinshipPaths(viewerMemberId, members, relationships)
     generatedLabels = await generateKinshipLabels({
-      viewer: {
-        gender: viewer.gender,
-        birthYear: viewer.birth_year,
-      },
-      targets: targetMembers.map(member => ({
+      viewerMemberId,
+      members: members.map(member => ({
         id: member.id,
         gender: member.gender,
-        birthYear: member.birth_year,
-        pathText: kinshipPaths.get(member.id) ?? null,
+        birthday: memberBirthdayForAi(member),
+      })),
+      relationships: relationships.map(relationship => ({
+        type: relationship.type,
+        fromMemberId: relationship.from_member_id,
+        toMemberId: relationship.to_member_id,
       })),
     })
   }

@@ -24,15 +24,8 @@ const describeError = (error: unknown): string => {
   return String(error)
 }
 
-const normalizeKinshipLabel = (label: string): string => {
-  const compact = label.trim().replace(/[，。,.；;：:\s]/g, '')
-  if (!compact) return ''
-  return compact
-    .replace(/连襟/g, '姐夫')
-    .replace(/妯娌/g, '嫂子')
-    .replace(/^姻亲$/, '亲人')
-    .slice(0, 20)
-}
+const sanitizeGeneratedLabel = (label: string): string =>
+  label.trim().replace(/[`“”"'，。,.;；:：\s]/g, '').slice(0, 20)
 
 const logDeepSeekDiagnostic = (event: string, detail: Record<string, unknown>): void => {
   console.error('[deepseek]', JSON.stringify({
@@ -197,43 +190,40 @@ export const generateBirthdayWish = async (prompt: string): Promise<string> => {
 }
 
 export interface KinshipLabelRequest {
-  viewer: {
-    gender: 'male' | 'female' | 'unknown'
-    birthYear: number | null
-  }
-  targets: Array<{
+  viewerMemberId: string
+  members: Array<{
     id: string
     gender: 'male' | 'female' | 'unknown'
-    birthYear: number | null
-    pathText: string | null
+    birthday: {
+      calendar: 'solar' | 'lunar' | null
+      year: number | null
+      month: number | null
+      day: number | null
+      isLeapMonth: boolean
+    } | null
+  }>
+  relationships: Array<{
+    type: 'parent' | 'spouse'
+    fromMemberId: string
+    toMemberId: string
   }>
 }
 
-const KINSHIP_LABEL_BATCH_SIZE = 1000
 const KINSHIP_LABEL_TIMEOUT_MS = 120_000
 
 const kinshipSystemPrompt = [
   '你是中文亲属称谓专家。',
-  '根据“当前用户到目标成员的关系链”生成“当前用户如何称呼目标成员”的简体中文称呼。',
-  '输入是一个 JSON 对象：viewer 表示当前登录用户已关联的家庭成员，也就是称呼视角；targets 表示本次需要生成称呼的目标成员。',
-  'viewer 字段说明：gender 是当前用户性别，birthYear 是当前用户出生年份。',
-  'target 字段说明：id 是目标成员唯一标识，gender 是目标成员性别，birthYear 是目标成员出生年份，pathText 是从 viewer 出发到目标成员的中文关系链，例如“妈妈的妈妈的女儿的丈夫”。',
-  'gender 为 male、female 或 unknown；birthYear 可能为 null。',
-  '必须以 pathText 为主要依据推导称呼，不能只按年龄或列表顺序判断。',
-  '如果某个 target 的 pathText 为 null 或空字符串，说明没有找到可用关系链，应返回“亲人”，不要猜测具体称呼。',
-  '只返回 JSON 对象，key 是目标成员 id，value 是称呼。',
+  '请根据输入的家庭成员和关系图，生成“viewerMemberId 对每位其他成员的称呼”。所有亲属关系推导都由你完成。',
+  'members 包含成员 id、gender 和 birthday；birthday 包含历法、年、月、日，未填写时为 null。',
+  'relationships 中 parent 表示 fromMemberId 是 toMemberId 的父母；spouse 表示两人是配偶。',
+  '你必须从 viewerMemberId 沿完整关系图推导称呼，不能只按年龄、成员顺序或单段关系判断。无法从关系图连通的成员返回“亲友”。',
+  '只返回 JSON 对象，key 是 viewer 之外的成员 id，value 是 viewer 对该成员的称呼。',
   '最终回答必须写在 message.content 中，不能只输出推理内容。',
-  '称呼要短、自然、适合家庭小程序展示，例如：自己、爸爸、妈妈、哥哥、外甥女、表侄、奶奶、舅妈、姨父。',
-  '同父母或同父/同母的兄弟姐妹，birthYear 更小表示年龄更大，应称哥哥/姐姐；birthYear 更大应称弟弟/妹妹。',
-  '兄弟姐妹的配偶按哥哥/姐姐/弟弟/妹妹关系称嫂子、姐夫、弟妹、妹夫。',
+  '称呼必须使用规范、正式的书面称谓，例如：兄、弟、姐、妹、伯父、叔父、姑母、舅父、舅母、姨母、婶母、堂兄、表姐、连襟、妯娌。',
+  '仅直系亲属保留家庭常用称呼：爸爸、妈妈、爷爷、奶奶、外公、外婆。',
+  '需要区分长幼时必须比较关系中相关两人的 birthday：先比年，再比月日，较早出生者年长。只要其中一人没有年份，就对该目标返回“亲友”；同年但缺少月日、或生日完全相同时也返回“亲友”，不得猜测。',
   '表哥、堂哥、表姐、堂姐的子女不能称为弟弟或妹妹，应称表侄、表侄女、堂侄、堂侄女等下一辈称呼。',
-  '如果需要区分哥哥/弟弟、姐姐/妹妹、姐夫/妹夫、嫂子/弟媳，必须优先根据成员 birthYear 判断年龄；birthYear 越小年龄越大。',
-  '不要输出“姐夫/妹夫”“哥哥/弟弟”这类带斜杠的不确定称呼，除非确实缺少出生年份。',
-  '配偶的亲兄弟姐妹直接按配偶视角称呼为哥哥、弟弟、姐姐、妹妹，不要加“妻子的”或“丈夫的”前缀。',
-  '配偶的兄弟姐妹的配偶也按家庭日常称呼为姐夫、妹夫、嫂子、弟妹，不要加“妻子的”或“丈夫的”前缀。',
-  '绝对不要输出“连襟”“妯娌”“姻亲”“内兄”“内弟”“襟兄”这类生僻或泛称；男性优先用姐夫、妹夫、哥哥、弟弟，女性优先用嫂子、弟妹、姐姐、妹妹。',
-  '如果关系是妻子的姐妹的丈夫，应称姐夫或妹夫，不要称连襟。',
-  '如果关系是丈夫的兄弟的妻子，应称嫂子或弟妹，不要称妯娌。',
+  '不要输出带斜杠、“或”、“的”的不确定或描述性称呼；无法确定时只返回“亲友”。',
   '不要输出解释、Markdown 或代码块。',
 ].join('\n')
 
@@ -241,25 +231,16 @@ const kinshipMaxTokens = (targetCount: number): number =>
   Math.min(4000, Math.max(1200, targetCount * 100))
 
 const kinshipRequestSummary = (input: KinshipLabelRequest): Record<string, unknown> => ({
-  viewerGender: input.viewer.gender,
-  viewerBirthYear: input.viewer.birthYear,
-  targetCount: input.targets.length,
-  missingPathCount: input.targets.filter(target => !target.pathText).length,
-  maxPathLength: input.targets.reduce((max, target) => Math.max(max, target.pathText?.length ?? 0), 0),
+  viewerMemberId: input.viewerMemberId,
+  memberCount: input.members.length,
+  targetCount: Math.max(0, input.members.length - 1),
+  relationshipCount: input.relationships.length,
+  missingBirthYearCount: input.members.filter(member => member.birthday?.year == null).length,
 })
 
 const kinshipBatches = (
   input: KinshipLabelRequest,
-): KinshipLabelRequest[] => {
-  const batches: KinshipLabelRequest[] = []
-  for (let index = 0; index < input.targets.length; index += KINSHIP_LABEL_BATCH_SIZE) {
-    batches.push({
-      ...input,
-      targets: input.targets.slice(index, index + KINSHIP_LABEL_BATCH_SIZE),
-    })
-  }
-  return batches
-}
+): KinshipLabelRequest[] => [input]
 
 const parseJsonObject = (content: string): Record<string, unknown> => {
   try {
@@ -299,7 +280,8 @@ export const generateKinshipLabels = async (
 
   const batches = kinshipBatches(input)
   for (const [batchIndex, batch] of batches.entries()) {
-    const maxTokens = kinshipMaxTokens(batch.targets.length)
+    const targetMembers = batch.members.filter(member => member.id !== batch.viewerMemberId)
+    const maxTokens = kinshipMaxTokens(targetMembers.length)
     const startedAt = Date.now()
     logDeepSeekInfo('kinship_batch_request', {
       batchIndex: batchIndex + 1,
@@ -319,18 +301,18 @@ export const generateKinshipLabels = async (
         true,
       )
       const parsed = parseJsonObject(content)
-      batch.targets.forEach(target => {
+      targetMembers.forEach(target => {
         const value = parsed[target.id]
         if (typeof value !== 'string') return
-        const label = normalizeKinshipLabel(value)
+        const label = sanitizeGeneratedLabel(value)
         if (!label) return
         labels.set(target.id, label)
       })
       logDeepSeekInfo('kinship_batch_success', {
         batchIndex: batchIndex + 1,
         batchCount: batches.length,
-        targetCount: batch.targets.length,
-        labelCount: batch.targets.filter(target => labels.has(target.id)).length,
+        targetCount: targetMembers.length,
+        labelCount: targetMembers.filter(target => labels.has(target.id)).length,
         durationMs: Date.now() - startedAt,
       })
     } catch (error) {
@@ -338,7 +320,7 @@ export const generateKinshipLabels = async (
         code: 'KINSHIP_LABEL_GENERATION_FAILED',
         batchIndex: batchIndex + 1,
         batchCount: batches.length,
-        targetCount: batch.targets.length,
+        targetCount: targetMembers.length,
         requestSummary: kinshipRequestSummary(batch),
         durationMs: Date.now() - startedAt,
         error: describeError(error),
