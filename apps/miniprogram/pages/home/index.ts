@@ -3,8 +3,11 @@ import {
   getNextBirthdayDate, calculateAge, getTodayLunarLabel
 } from '../../utils/familyData'
 import { generateAndCopyBirthdayWish } from '../../utils/birthdayWish'
-import { ensureFamilyData } from '../../services/familyStore'
-import { getBirthdaySubscriptionConfig } from '../../services/api'
+import { ensureFamilyData, switchFamily } from '../../services/familyStore'
+import {
+  getBirthdaySubscriptionConfig, listFamilies, listMemberLinkRequests,
+  type FamilySummary,
+} from '../../services/api'
 import { FamilyMember } from '../../types/family'
 
 interface TodayPerson {
@@ -46,7 +49,11 @@ Component({
     loading: true,
     error: '',
     needsFamily: false,
+    familyId: '',
     familyName: '',
+    families: [] as FamilySummary[],
+    switchingFamily: false,
+    pendingLinkCount: 0,
     canManage: false,
     monthLabel: '',
     dayNumber: '',
@@ -92,6 +99,10 @@ Component({
           this.setData({
             loading: false,
             needsFamily: true,
+            familyId: '',
+            familyName: '',
+            families: [],
+            pendingLinkCount: 0,
             noMembers: false,
             monthLabel,
             dayNumber,
@@ -154,6 +165,7 @@ Component({
           error: '',
           needsFamily: false,
           noMembers,
+          familyId: snapshot.family.id,
           familyName: snapshot.family.name,
           canManage: role === 'owner',
           monthLabel,
@@ -170,6 +182,7 @@ Component({
           monthRemaining,
         })
 
+        void this.loadFamilyActions(snapshot.family.id, role === 'owner' || role === 'admin')
         void this.loadReminder(snapshot.family.id)
       } catch (error) {
         this.setData({
@@ -179,14 +192,30 @@ Component({
       }
     },
 
+    async loadFamilyActions(familyId: string, canApproveLink: boolean) {
+      const [families, linkRequests] = await Promise.all([
+        listFamilies().catch(() => [] as FamilySummary[]),
+        canApproveLink
+          ? listMemberLinkRequests(familyId).catch(() => [])
+          : Promise.resolve([]),
+      ])
+      if (this.data.familyId !== familyId) return
+      this.setData({
+        families,
+        pendingLinkCount: linkRequests.length,
+      })
+    },
+
     async loadReminder(familyId: string) {
       try {
         const config = await getBirthdaySubscriptionConfig(familyId)
+        if (this.data.familyId !== familyId) return
         this.setData({
           reminderConfigured: config.configured,
           reminderEnabled: config.configured && config.activeGrantCount > 0,
         })
       } catch {
+        if (this.data.familyId !== familyId) return
         this.setData({ reminderConfigured: false, reminderEnabled: false })
       }
     },
@@ -217,6 +246,37 @@ Component({
 
     goFamilyManage() {
       wx.navigateTo({ url: '/pages/family-manage/index' })
+    },
+
+    openFamilySwitcher() {
+      const { families, familyId, switchingFamily } = this.data
+      if (switchingFamily || families.length < 2) return
+      if (families.length > 6) {
+        wx.navigateTo({ url: '/pages/family-manage/index' })
+        return
+      }
+      wx.showActionSheet({
+        itemList: families.map(family => (family.id === familyId ? `${family.name}（当前）` : family.name)),
+        success: result => { void this.switchToFamily(result.tapIndex) },
+      })
+    },
+
+    async switchToFamily(index: number) {
+      const family = this.data.families[index]
+      if (!family || family.id === this.data.familyId || this.data.switchingFamily) return
+      this.setData({ switchingFamily: true, pendingLinkCount: 0 })
+      wx.showLoading({ title: '正在切换' })
+      try {
+        await switchFamily(family)
+        await this.loadData()
+        wx.hideLoading()
+        wx.showToast({ title: `已切换到${family.name}`, icon: 'none' })
+      } catch (error) {
+        wx.hideLoading()
+        wx.showToast({ title: error instanceof Error ? error.message : '切换失败', icon: 'none' })
+      } finally {
+        this.setData({ switchingFamily: false })
+      }
     },
 
     goBirthday() {

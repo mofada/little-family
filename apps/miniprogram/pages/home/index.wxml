@@ -26,8 +26,28 @@
     <block wx:else>
       <view class="sheet">
       <view class="masthead">
-        <text class="masthead__name">{{familyName || '小家记'}}</text>
+        <view
+          class="masthead__family {{switchingFamily ? 'masthead__family--disabled' : ''}}"
+          bindtap="openFamilySwitcher"
+          hover-class="row--pressed"
+        >
+          <text class="masthead__name">{{familyName || '小家记'}}</text>
+          <view wx:if="{{families.length > 1}}" class="masthead__chevron"></view>
+        </view>
         <text class="seal">家</text>
+      </view>
+
+      <view
+        wx:if="{{pendingLinkCount > 0}}"
+        class="review-notice"
+        bindtap="goFamilyManage"
+        hover-class="row--pressed"
+      >
+        <view class="review-notice__main">
+          <text class="review-notice__title">{{pendingLinkCount}} 条身份认领待确认</text>
+          <text class="review-notice__detail">确认申请人与家庭成员的对应关系</text>
+        </view>
+        <view class="review-notice__action">去处理</view>
       </view>
 
       <view class="rule"></view>

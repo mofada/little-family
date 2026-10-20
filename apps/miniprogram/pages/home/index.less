@@ -34,16 +34,42 @@
 .masthead {
   display: flex;
   align-items: center;
-  gap: 14rpx;
+  justify-content: space-between;
+  gap: 20rpx;
   padding: 30rpx 0 20rpx;
 }
 
+.masthead__family {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 14rpx;
+}
+
+.masthead__family--disabled {
+  opacity: 0.55;
+}
+
 .masthead__name {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
   font-family: "Songti SC", "STSong", "Noto Serif SC", "Source Han Serif SC", "Noto Serif CJK SC", serif;
   font-size: 31rpx;
   font-weight: 600;
   letter-spacing: 6rpx;
   color: @ink;
+}
+
+.masthead__chevron {
+  width: 13rpx;
+  height: 13rpx;
+  flex: none;
+  margin-top: -6rpx;
+  border-right: 2rpx solid @ink-soft;
+  border-bottom: 2rpx solid @ink-soft;
+  transform: rotate(45deg);
 }
 
 .seal {
@@ -57,6 +83,52 @@
   font-family: "Songti SC", "STSong", "Noto Serif SC", "Source Han Serif SC", "Noto Serif CJK SC", serif;
   font-size: 24rpx;
   letter-spacing: 0;
+}
+
+/* 当前家庭待办 */
+.review-notice {
+  display: flex;
+  align-items: center;
+  gap: 20rpx;
+  margin-bottom: 24rpx;
+  padding: 20rpx 22rpx;
+  border: 1rpx solid #e3c8c1;
+  border-radius: 8rpx;
+  background: #fbf1f0;
+}
+
+.review-notice__main {
+  flex: 1;
+  min-width: 0;
+}
+
+.review-notice__title {
+  display: block;
+  font-size: 28rpx;
+  font-weight: 700;
+  color: @vermilion-deep;
+}
+
+.review-notice__detail {
+  display: block;
+  margin-top: 6rpx;
+  font-size: 19rpx;
+  letter-spacing: 1rpx;
+  color: @ink-soft;
+}
+
+.review-notice__action {
+  height: 56rpx;
+  padding: 0 20rpx;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2rpx solid @vermilion;
+  border-radius: 8rpx;
+  color: @vermilion;
+  font-size: 24rpx;
+  font-weight: 600;
 }
 
 /* 双细线 */

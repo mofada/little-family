@@ -26,7 +26,6 @@
           <view class="head">
             <view class="head__row">
               <text class="head__name">{{me.name}}</text>
-              <view class="head__me"><text>我</text></view>
             </view>
             <text class="head__meta">{{me.meta}}</text>
             <view class="head__birthday">
