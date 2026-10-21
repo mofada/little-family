@@ -1,6 +1,6 @@
 import { config } from './config'
 import { AppError } from './types'
-import { removeBirthdayWishAge } from './birthdayWishPrompt'
+import { normalizeBirthdayWishSpacing, removeBirthdayWishAge } from './birthdayWishPrompt'
 
 interface DeepSeekResponse {
   choices?: Array<{
@@ -197,7 +197,7 @@ export const generateBirthdayWish = async (prompt: string, age: number | null): 
     '生日祝福生成失败',
     'BIRTHDAY_WISH_GENERATION_FAILED',
   )
-  return removeBirthdayWishAge(wish, age)
+  return normalizeBirthdayWishSpacing(removeBirthdayWishAge(wish, age))
 }
 
 export interface KinshipLabelRequest {

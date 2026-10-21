@@ -113,6 +113,7 @@ ${direction}
 
 硬性要求：
 - 使用3—6行短句排版；每行简短顺口，可以对仗或押一点节奏，不写解释性长句。
+- 行与行之间只允许一个换行符，不得插入空行，也不要用空格占据单独一行。
 - 称呼从“${relationLabel || '家人'}”“${combinedAddress}”中选择更自然的一个，按本次开头要求放在第一或第二行；可以搭配㊗️，也可以先放花体生日英文。${member.nickname ? `称呼后保留“@${member.nickname}”。` : '昵称未记录时绝不能编造@对象。'}
 - 必须有“生日快乐”，蛋糕可以连续放3—6个，整体使用8—16个装饰符号，允许适度重复以营造家族群气氛。
 - 从 [蛋糕][庆祝][礼物][红包][發][福][太阳][烟花][爱心][加油] 中自然选用2—6个微信表情，可搭配🎂🎁🎊🥳❤️🍻🌈✨等 emoji。
@@ -140,3 +141,12 @@ export const removeBirthdayWishAge = (wish: string, age: number | null): string 
   if (age === null) return wish
   return wish.replace(new RegExp(`${age}\\s*(?:周)?岁`, 'g'), '').replace(/ {2,}/g, ' ').trim()
 }
+
+export const normalizeBirthdayWishSpacing = (wish: string): string => (
+  wish
+    .replace(/\r\n?/g, '\n')
+    .split('\n')
+    .map(line => line.trim())
+    .filter(Boolean)
+    .join('\n')
+)

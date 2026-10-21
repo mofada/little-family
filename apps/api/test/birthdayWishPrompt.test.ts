@@ -1,5 +1,9 @@
 import assert from 'node:assert/strict'
-import { buildBirthdayWishPrompt, removeBirthdayWishAge } from '../src/birthdayWishPrompt'
+import {
+  buildBirthdayWishPrompt,
+  normalizeBirthdayWishSpacing,
+  removeBirthdayWishAge,
+} from '../src/birthdayWishPrompt'
 
 const test = (name: string, run: () => void): void => {
   run()
@@ -24,6 +28,7 @@ test('祝福提示词只用实际年龄判断语气，不在正文展示', () =>
   assert.match(result.prompt, /正文不得出现年龄/)
   assert.match(result.prompt, /年轻同辈：可用天天开心/)
   assert.match(result.prompt, /使用3—6行短句排版/)
+  assert.match(result.prompt, /不得插入空行/)
   assert.match(result.prompt, /整体使用8—16个装饰符号/)
   assert.match(result.prompt, /年龄：31岁/)
 })
@@ -69,5 +74,12 @@ test('模型意外写出年龄时从最终祝福移除', () => {
   assert.equal(
     removeBirthdayWishAge('姐，31周岁生日快乐🎂', 31),
     '姐，生日快乐🎂',
+  )
+})
+
+test('祝福正文会移除所有空行并统一换行符', () => {
+  assert.equal(
+    normalizeBirthdayWishSpacing('  姐，生日快乐🎂  \r\n\r\n   \r\n平安喜乐\n\n好运常在  '),
+    '姐，生日快乐🎂\n平安喜乐\n好运常在',
   )
 })
