@@ -2,7 +2,7 @@ import {
   familyMembers, calculateAge, getDaysUntilBirthday, getMemberColor
 } from '../../utils/familyData'
 import { getCurrentSnapshot } from '../../services/familyStore'
-import { generateAndCopyBirthdayWish } from '../../utils/birthdayWish'
+import type { FamilyMember } from '../../types/family'
 
 interface MemberData {
   id: string
@@ -23,6 +23,10 @@ interface MemberData {
 interface RelativeMember {
   id: string
   name: string
+}
+
+interface BirthdayWishModalInstance {
+  open(familyId: string, member: FamilyMember): void
 }
 
 const genderText = (gender: MemberData['gender']): string => {
@@ -52,7 +56,6 @@ Component({
     birthdayText: '',
     genderText: '',
     metaLine: '',
-    generating: false,
   },
   observers: {
     memberJson(json: string) {
@@ -126,16 +129,12 @@ Component({
     onContentTap() {
       // 阻止冒泡到遮罩
     },
-    async generateWish() {
-      const { member, generating } = this.data
+    generateWish() {
+      const { member } = this.data
       const familyId = getCurrentSnapshot()?.family.id
-      if (!member || !familyId || !this.data.isBirthday || generating) return
-      this.setData({ generating: true })
-      try {
-        await generateAndCopyBirthdayWish(familyId, member)
-      } finally {
-        this.setData({ generating: false })
-      }
+      if (!member || !familyId || !this.data.isBirthday) return
+      const modal = this.selectComponent('#birthday-wish-modal') as unknown as BirthdayWishModalInstance
+      modal?.open(familyId, member)
     },
     editMember() {
       const { member } = this.data

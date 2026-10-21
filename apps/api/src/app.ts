@@ -8,7 +8,7 @@ import { db, transaction } from './db'
 import { createSession, requireAuth, requireFamilyRole, resolveWechatUser, sha256 } from './auth'
 import { exchangeWechatCode, exchangeWechatWebsiteCode } from './wechat'
 import {
-  birthdaySubscriptionSchema, familySchema, invitationSchema,
+  birthdaySubscriptionSchema, birthdayWishRequestSchema, familySchema, invitationSchema,
   legacyFamilyImportSchema, linkMemberSchema, loginSchema, memberLinkRequestDecisionSchema, memberSchema,
   wechatWebLoginSchema, webLoginSchema,
 } from './schemas'
@@ -941,6 +941,7 @@ app.post('/api/families/:familyId/members/:memberId/birthday-wish', birthdayWish
   const familyId = routeParam(request, 'familyId')
   const memberId = routeParam(request, 'memberId')
   requireFamilyRole(authUser.id, familyId, 'viewer')
+  const input = birthdayWishRequestSchema.parse(request.body ?? {})
   const member = db.prepare(`
     SELECT id, name, nickname, relation_label, birth_year,
            gender, birthday_type, birth_month, birth_day, is_leap_month, created_at
@@ -958,7 +959,13 @@ app.post('/api/families/:familyId/members/:memberId/birthday-wish', birthdayWish
   `).all(familyId) as unknown as MemberRow[]
   const kinshipLabels = await loadKinshipLabels(familyId, currentUser?.linkedMemberId, members)
   const relationLabel = kinshipLabels.get(memberId) ?? fallbackKinshipLabel(currentUser?.linkedMemberId, member)
-  const birthdayWish = buildBirthdayWishPrompt(member, relationLabel, getBeijingClock().year)
+  const birthdayWish = buildBirthdayWishPrompt(
+    member,
+    relationLabel,
+    getBeijingClock().year,
+    undefined,
+    input.previousWishes,
+  )
   const wish = await generateBirthdayWish(birthdayWish.prompt, birthdayWish.age)
   response.json({ wish })
 })

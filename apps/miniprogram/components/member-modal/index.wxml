@@ -64,7 +64,7 @@
           class="btn btn--primary"
           bindtap="generateWish"
           hover-class="tap-pressed"
-        >{{generating ? '正在生成…' : '生成生日祝福'}}</view>
+        >生成生日祝福</view>
         <view
           wx:if="{{canEdit}}"
           class="btn btn--secondary"
@@ -75,3 +75,5 @@
     </scroll-view>
   </view>
 </view>
+
+<birthday-wish-modal id="birthday-wish-modal" />

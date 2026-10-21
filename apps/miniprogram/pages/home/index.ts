@@ -2,7 +2,6 @@ import {
   familyMembers, getTodayBirthdays, getUpcomingBirthdays, getDaysUntilBirthday,
   getNextBirthdayDate, calculateAge, getTodayLunarLabel
 } from '../../utils/familyData'
-import { generateAndCopyBirthdayWish } from '../../utils/birthdayWish'
 import { ensureFamilyData, switchFamily } from '../../services/familyStore'
 import {
   getBirthdaySubscriptionConfig, listFamilies, listMemberLinkRequests,
@@ -27,6 +26,10 @@ interface UpcomingPerson {
   month: string
   badge: string
   isUrgent: boolean
+}
+
+interface BirthdayWishModalInstance {
+  open(familyId: string, member: FamilyMember): void
 }
 
 const WEEKDAYS = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
@@ -231,7 +234,8 @@ Component({
       if (!member) return
       const snapshot = await ensureFamilyData()
       if (!snapshot) return
-      await generateAndCopyBirthdayWish(snapshot.family.id, member)
+      const modal = this.selectComponent('#birthday-wish-modal') as unknown as BirthdayWishModalInstance
+      modal?.open(snapshot.family.id, member)
     },
 
     onMemberTap(e: WechatMiniprogram.TouchEvent) {

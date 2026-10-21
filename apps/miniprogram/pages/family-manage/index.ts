@@ -8,6 +8,7 @@ import { invalidateFamilyData, switchFamily } from '../../services/familyStore'
 
 const INVITE_CACHE_PREFIX = 'little-family:invite:'
 const JOINS_SEEN_PREFIX = 'little-family:joins-seen:'
+const FAMILY_INVITE_SHARE_IMAGE = '/assets/share/family-invite.png'
 
 interface CachedInvite {
   invitationId: string
@@ -300,13 +301,15 @@ Component({
       const current = code && this.data.inviteFamilyId === this.data.activeFamilyId
       if (!current) {
         return {
-          title: '小家记 · 记录家人的温暖时光',
+          title: '小家记 · 记住家人与生日',
           path: '/pages/home/index',
+          imageUrl: FAMILY_INVITE_SHARE_IMAGE,
         }
       }
       return {
-        title: `${this.data.activeFamilyName} 邀请你一起记录家庭时光`,
+        title: `${this.data.activeFamilyName} 邀请你一起记录家人与生日`,
         path: `/pages/invite/index?code=${encodeURIComponent(code)}`,
+        imageUrl: FAMILY_INVITE_SHARE_IMAGE,
       }
     },
 

@@ -141,3 +141,7 @@ export const memberLinkRequestDecisionSchema = z.object({
 export const birthdaySubscriptionSchema = z.object({
   templateId: z.string().trim().min(1).max(100),
 })
+
+export const birthdayWishRequestSchema = z.object({
+  previousWishes: z.array(z.string().trim().min(1).max(1000)).max(3).optional().default([]),
+})

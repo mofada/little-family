@@ -32,6 +32,19 @@ test('不同表达路线会生成不同提示词', () => {
   const first = buildBirthdayWishPrompt(member, '姐', 2026, 0)
   const second = buildBirthdayWishPrompt(member, '姐', 2026, 1)
   assert.notEqual(first.prompt, second.prompt)
+  assert.doesNotMatch(first.prompt, /生日新篇|解锁生日/)
+  assert.doesNotMatch(second.prompt, /生日新篇|解锁生日/)
+  assert.doesNotMatch(first.prompt, /田晓光|芊芊猪|果果小帅哥/)
+})
+
+test('换一条时会把最近文案作为避重材料', () => {
+  const result = buildBirthdayWishPrompt(member, '姐', 2026, 2, [
+    '㊗️姐生日快乐🎂\n平安喜乐，好运常在',
+    '姐，生日快乐🎁\n愿你万事顺意',
+  ])
+  assert.match(result.prompt, /最近生成过的文案/)
+  assert.match(result.prompt, /平安喜乐，好运常在/)
+  assert.match(result.prompt, /必须更换开头方式、主体句式和核心祝福组合/)
 })
 
 test('缺少出生年份时不猜测年龄', () => {
@@ -44,7 +57,7 @@ test('缺少出生年份时不猜测年龄', () => {
 test('有群内昵称时要求在开头保留@对象', () => {
   const result = buildBirthdayWishPrompt({ ...member, nickname: '芊芊猪' }, '姐', 2026, 0)
   assert.match(result.prompt, /“姐”“小兰姐”/)
-  assert.match(result.prompt, /㊗️称呼@芊芊猪/)
+  assert.match(result.prompt, /称呼后保留“@芊芊猪”/)
   assert.match(result.prompt, /群内@昵称：@芊芊猪/)
 })
 

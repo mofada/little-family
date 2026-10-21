@@ -254,11 +254,16 @@ export const registerBirthdaySubscription = async (familyId: string, templateId:
   await request(`/api/families/${familyId}/birthday-subscriptions`, 'POST', { templateId })
 }
 
-export const generateBirthdayWish = async (familyId: string, memberId: string): Promise<string> => {
+export const generateBirthdayWish = async (
+  familyId: string,
+  memberId: string,
+  previousWishes: string[] = [],
+): Promise<string> => {
   await ensureAuth()
   const result = await request<{ wish: string }>(
     `/api/families/${familyId}/members/${memberId}/birthday-wish`,
     'POST',
+    { previousWishes },
   )
   return result.wish
 }

@@ -2,10 +2,14 @@ import {
   familyMembers, getTodayBirthdays, getDaysUntilBirthday, getNextBirthdayDate,
   calculateAge, getTodayLunarLabel
 } from '../../utils/familyData'
-import { generateAndCopyBirthdayWish } from '../../utils/birthdayWish'
 import { ensureFamilyData, invalidateFamilyData } from '../../services/familyStore'
 import { getBirthdaySubscriptionConfig, linkCurrentUser, type BirthdaySubscriptionConfig } from '../../services/api'
 import { requestBirthdaySubscription } from '../../utils/subscription'
+import type { FamilyMember } from '../../types/family'
+
+interface BirthdayWishModalInstance {
+  open(familyId: string, member: FamilyMember): void
+}
 
 interface MonthSection {
   label: string
@@ -331,7 +335,9 @@ Component({
     async generateWish(e: WechatMiniprogram.TouchEvent) {
       const id = (e.currentTarget.dataset as { id: string }).id
       const member = familyMembers.find(m => m.id === id)
-      if (member && this.data.familyId) await generateAndCopyBirthdayWish(this.data.familyId, member)
+      if (!member || !this.data.familyId) return
+      const modal = this.selectComponent('#birthday-wish-modal') as unknown as BirthdayWishModalInstance
+      modal?.open(this.data.familyId, member)
     },
 
     async subscribeBirthdayReminder() {

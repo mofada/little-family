@@ -1,0 +1,39 @@
+<view wx:if="{{show}}" class="wish-mask" catchtap="onMaskTap">
+  <view class="wish-sheet" catchtap="onContentTap">
+    <view class="wish-grabber"></view>
+    <view class="wish-close" catchtap="close" hover-class="tap-pressed" aria-label="关闭祝福预览">×</view>
+
+    <view class="wish-head">
+      <view class="wish-seal">祝</view>
+      <view class="wish-head__copy">
+        <text class="wish-title">生日祝福写好了</text>
+        <text class="wish-subtitle">发给 {{memberName}}</text>
+      </view>
+    </view>
+
+    <view wx:if="{{generating}}" class="wish-state">
+      <view class="wish-loading"></view>
+      <text class="wish-state__title">正在换一种说法</text>
+      <text class="wish-state__desc">马上写好，请稍等一下</text>
+    </view>
+
+    <view wx:elif="{{error}}" class="wish-state wish-state--error">
+      <text class="wish-state__title">这次没有写出来</text>
+      <text class="wish-state__desc">{{error}}</text>
+      <view class="wish-retry" catchtap="regenerate" hover-class="tap-pressed">重新生成</view>
+    </view>
+
+    <block wx:else>
+      <scroll-view class="wish-preview" scroll-y enhanced show-scrollbar="{{false}}">
+        <text class="wish-content" user-select>{{wish}}</text>
+      </scroll-view>
+      <text class="wish-hint">复制后可粘贴到群聊或好友</text>
+      <view class="wish-actions">
+        <button class="wish-button wish-button--secondary" catchtap="regenerate" hover-class="tap-pressed">换一条</button>
+        <button class="wish-button wish-button--primary" catchtap="copyWish" hover-class="tap-pressed">
+          复制祝福
+        </button>
+      </view>
+    </block>
+  </view>
+</view>

@@ -1,0 +1,215 @@
+@import "../../styles/print";
+
+.wish-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: flex;
+  align-items: flex-end;
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.wish-sheet {
+  position: relative;
+  box-sizing: border-box;
+  width: 100%;
+  max-height: 88vh;
+  padding: 0 34rpx calc(30rpx + env(safe-area-inset-bottom));
+  overflow: hidden;
+  background: #ffffff;
+}
+
+.wish-grabber {
+  width: 72rpx;
+  height: 8rpx;
+  margin: 16rpx auto 0;
+  border-radius: 9999rpx;
+  background: #f0ebe6;
+}
+
+.wish-close {
+  position: absolute;
+  top: 24rpx;
+  right: 24rpx;
+  z-index: 2;
+  width: 64rpx;
+  height: 64rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1rpx solid @rule;
+  border-radius: 8rpx;
+  background: @paper;
+  color: @ink-soft;
+  font-size: 31rpx;
+}
+
+.wish-head {
+  display: flex;
+  align-items: center;
+  gap: 18rpx;
+  padding: 26rpx 80rpx 24rpx 0;
+  border-bottom: 1rpx solid @rule;
+}
+
+.wish-seal {
+  width: 52rpx;
+  height: 52rpx;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: @vermilion;
+  color: #ffffff;
+  .serif();
+  font-size: 28rpx;
+}
+
+.wish-head__copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4rpx;
+}
+
+.wish-title {
+  .serif();
+  color: @ink;
+  font-size: 38rpx;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.wish-subtitle {
+  max-width: 100%;
+  overflow: hidden;
+  color: @ink-soft;
+  font-size: 24rpx;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wish-preview {
+  box-sizing: border-box;
+  max-height: 48vh;
+  min-height: 280rpx;
+  margin-top: 26rpx;
+  padding: 28rpx;
+  border: 1rpx solid #f0ebe6;
+  border-radius: 16rpx;
+  background: @paper;
+}
+
+.wish-content {
+  display: block;
+  color: @ink;
+  font-size: 28rpx;
+  line-height: 1.8;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.wish-hint {
+  display: block;
+  margin-top: 18rpx;
+  color: @ink-soft;
+  font-size: 24rpx;
+  line-height: 1.5;
+}
+
+.wish-actions {
+  display: flex;
+  gap: 16rpx;
+  margin-top: 22rpx;
+}
+
+.wish-button {
+  height: 80rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  border-radius: 8rpx;
+  font-size: 28rpx;
+  font-weight: 600;
+  line-height: 80rpx;
+}
+
+.wish-button::after {
+  border: 0;
+}
+
+.wish-button--secondary {
+  flex: 0 0 190rpx;
+  border: 2rpx solid @rule;
+  background: transparent;
+  color: @ink;
+}
+
+.wish-button--primary {
+  flex: 1;
+  background: @vermilion;
+  color: #ffffff;
+}
+
+.wish-state {
+  min-height: 390rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 28rpx 0;
+  text-align: center;
+}
+
+.wish-state--error {
+  color: #b91c1c;
+}
+
+.wish-loading {
+  width: 52rpx;
+  height: 52rpx;
+  margin-bottom: 24rpx;
+  border: 4rpx solid #eaded7;
+  border-top-color: @vermilion;
+  border-radius: 50%;
+  animation: wish-spin 0.8s linear infinite;
+}
+
+.wish-state__title {
+  color: @ink;
+  font-size: 31rpx;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.wish-state__desc {
+  max-width: 560rpx;
+  margin-top: 12rpx;
+  color: @ink-soft;
+  font-size: 24rpx;
+  line-height: 1.5;
+}
+
+.wish-retry {
+  min-width: 180rpx;
+  height: 64rpx;
+  margin-top: 28rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2rpx solid @vermilion;
+  border-radius: 8rpx;
+  color: @vermilion;
+  font-size: 24rpx;
+  font-weight: 600;
+}
+
+.tap-pressed {
+  opacity: 0.72;
+}
+
+@keyframes wish-spin {
+  to { transform: rotate(360deg); }
+}

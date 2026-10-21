@@ -180,4 +180,5 @@
   </scroll-view>
 
   <member-modal show="{{showModal}}" memberJson="{{selectedMemberJson}}" bind:close="onModalClose" />
+  <birthday-wish-modal id="birthday-wish-modal" />
 </view>

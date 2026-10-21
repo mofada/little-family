@@ -1,5 +1,11 @@
 import assert from 'node:assert/strict'
-import { legacyFamilyImportSchema, memberSchema, wechatWebLoginSchema, webLoginSchema } from '../src/schemas'
+import {
+  birthdayWishRequestSchema,
+  legacyFamilyImportSchema,
+  memberSchema,
+  wechatWebLoginSchema,
+  webLoginSchema,
+} from '../src/schemas'
 import { getBeijingClock } from '../src/birthdayClock'
 
 const test = (name: string, run: () => void): void => {
@@ -107,4 +113,17 @@ test('微信网站回调同时要求 code 和长随机 state', () => {
     code: 'wx-code',
     state: 'a-secure-random-state-value',
   }).success, true)
+})
+
+test('生日祝福避重上下文最多接收三条短文案', () => {
+  assert.deepEqual(birthdayWishRequestSchema.parse({}).previousWishes, [])
+  assert.equal(birthdayWishRequestSchema.safeParse({
+    previousWishes: ['第一条', '第二条', '第三条'],
+  }).success, true)
+  assert.equal(birthdayWishRequestSchema.safeParse({
+    previousWishes: ['一', '二', '三', '四'],
+  }).success, false)
+  assert.equal(birthdayWishRequestSchema.safeParse({
+    previousWishes: ['字'.repeat(1001)],
+  }).success, false)
 })

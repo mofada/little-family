@@ -1,6 +1,8 @@
 import { acceptInvitation, previewInvitation, type InvitationPreview } from '../../services/api'
 import { invalidateFamilyData } from '../../services/familyStore'
 
+const FAMILY_INVITE_SHARE_IMAGE = '/assets/share/family-invite.png'
+
 const expiryLabel = (iso: string): string => {
   const date = new Date(iso)
   if (Number.isNaN(date.getTime())) return ''
@@ -66,6 +68,22 @@ Component({
 
     goHome() {
       wx.switchTab({ url: '/pages/home/index' })
+    },
+
+    onShareAppMessage() {
+      const preview = this.data.preview
+      if (!preview || !this.data.code) {
+        return {
+          title: '小家记 · 记住家人与生日',
+          path: '/pages/home/index',
+          imageUrl: FAMILY_INVITE_SHARE_IMAGE,
+        }
+      }
+      return {
+        title: `${preview.familyName} 邀请你一起记录家人与生日`,
+        path: `/pages/invite/index?code=${encodeURIComponent(this.data.code)}`,
+        imageUrl: FAMILY_INVITE_SHARE_IMAGE,
+      }
     },
   },
 })
