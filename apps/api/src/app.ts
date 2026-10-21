@@ -323,7 +323,7 @@ const clearFamilyKinshipLabels = (familyId: string): void => {
 
 const fallbackKinshipLabel = (viewerMemberId: string | null | undefined, member: MemberRow): string => {
   if (viewerMemberId && member.id === viewerMemberId) return '自己'
-  return member.relation_label ? sanitizeKinshipLabel(member.relation_label) : FALLBACK_KINSHIP_LABEL
+  return FALLBACK_KINSHIP_LABEL
 }
 
 const loadKinshipLabels = async (
@@ -394,6 +394,43 @@ const refreshKinshipLabels = async (
   })
 
   return labels
+}
+
+const refreshLinkedMemberKinshipLabels = async (
+  familyId: string,
+  linkedMemberId: string,
+  trigger: 'direct_link' | 'link_approval',
+): Promise<boolean> => {
+  const startedAt = Date.now()
+  const members = db.prepare(`
+    SELECT id, name, nickname, relation_label, birth_year,
+           gender, birthday_type, birth_month, birth_day, is_leap_month, created_at
+    FROM members WHERE family_id = ?
+  `).all(familyId) as unknown as MemberRow[]
+  const relationships = db.prepare(`
+    SELECT id, from_member_id, to_member_id, type
+    FROM relationships WHERE family_id = ?
+  `).all(familyId) as unknown as RelationshipRow[]
+
+  try {
+    await refreshKinshipLabels(familyId, linkedMemberId, members, relationships)
+    logKinship('automatic_refresh_succeeded', {
+      trigger,
+      familyIdSuffix: familyId.slice(-8),
+      linkedMemberIdSuffix: linkedMemberId.slice(-8),
+      durationMs: Date.now() - startedAt,
+    })
+    return true
+  } catch (error) {
+    logKinship('automatic_refresh_failed', {
+      trigger,
+      familyIdSuffix: familyId.slice(-8),
+      linkedMemberIdSuffix: linkedMemberId.slice(-8),
+      durationMs: Date.now() - startedAt,
+      error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+    }, 'error')
+    return false
+  }
 }
 
 const getSnapshot = async (familyId: string, viewerMemberId?: string | null) => {
@@ -778,7 +815,7 @@ app.post('/api/families/:familyId/kinship-labels/refresh', async (request: Reque
   }
 })
 
-app.patch('/api/families/:familyId/me', (request: Request, response) => {
+app.patch('/api/families/:familyId/me', async (request: Request, response) => {
   const { authUser } = request as AuthenticatedRequest
   const familyId = routeParam(request, 'familyId')
   const role = requireFamilyRole(authUser.id, familyId, 'viewer')
@@ -817,7 +854,8 @@ app.patch('/api/families/:familyId/me', (request: Request, response) => {
   db.prepare(`
     UPDATE family_users SET linked_member_id = ? WHERE family_id = ? AND user_id = ?
   `).run(input.memberId, familyId, authUser.id)
-  response.json({ linkedMemberId: input.memberId, status: 'approved' })
+  const kinshipRefreshed = await refreshLinkedMemberKinshipLabels(familyId, input.memberId, 'direct_link')
+  response.json({ linkedMemberId: input.memberId, status: 'approved', kinshipRefreshed })
 })
 
 app.get('/api/families/:familyId/member-link-requests', (request: Request, response) => {
@@ -841,7 +879,7 @@ app.get('/api/families/:familyId/member-link-requests', (request: Request, respo
   response.json({ requests })
 })
 
-app.patch('/api/families/:familyId/member-link-requests/:requestId', (request: Request, response) => {
+app.patch('/api/families/:familyId/member-link-requests/:requestId', async (request: Request, response) => {
   const { authUser } = request as AuthenticatedRequest
   const familyId = routeParam(request, 'familyId')
   const requestId = routeParam(request, 'requestId')
@@ -868,7 +906,10 @@ app.patch('/api/families/:familyId/member-link-requests/:requestId', (request: R
     }
     audit(familyId, authUser.id, input.status === 'approved' ? 'approve_link' : 'reject_link', 'member', pending.memberId, { userId: pending.userId })
   })
-  response.json({ status: input.status })
+  const kinshipRefreshed = input.status === 'approved'
+    ? await refreshLinkedMemberKinshipLabels(familyId, pending.memberId, 'link_approval')
+    : false
+  response.json({ status: input.status, kinshipRefreshed })
 })
 
 app.delete('/api/families/:familyId/me', (request: Request, response) => {

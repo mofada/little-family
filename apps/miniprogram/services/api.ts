@@ -150,7 +150,7 @@ export const linkCurrentUser = async (
   memberId: string | null,
 ): Promise<{ linkedMemberId: string | null; status: 'approved' | 'pending' }> => {
   await ensureAuth()
-  return request(`/api/families/${familyId}/me`, 'PATCH', { memberId })
+  return request(`/api/families/${familyId}/me`, 'PATCH', { memberId }, true, 180_000)
 }
 
 export interface MemberLinkRequest {
@@ -175,7 +175,13 @@ export const decideMemberLinkRequest = async (
   status: 'approved' | 'rejected',
 ): Promise<void> => {
   await ensureAuth()
-  await request(`/api/families/${familyId}/member-link-requests/${requestId}`, 'PATCH', { status })
+  await request(
+    `/api/families/${familyId}/member-link-requests/${requestId}`,
+    'PATCH',
+    { status },
+    true,
+    180_000,
+  )
 }
 
 export const leaveFamily = async (familyId: string): Promise<void> => {

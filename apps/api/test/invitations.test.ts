@@ -8,6 +8,33 @@ const temporaryDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'little-family-
 process.env.NODE_ENV = 'development'
 process.env.ALLOW_DEV_LOGIN = 'true'
 process.env.DATABASE_PATH = path.join(temporaryDirectory, 'test.db')
+process.env.DEEPSEEK_API_KEY = 'integration-test-key'
+
+const originalFetch = globalThis.fetch
+globalThis.fetch = async (input, init): Promise<Response> => {
+  const url = typeof input === 'string'
+    ? input
+    : input instanceof URL
+      ? input.href
+      : input.url
+  if (url === 'https://api.deepseek.com/chat/completions') {
+    const body = JSON.parse(String(init?.body)) as {
+      messages: Array<{ role: string; content: string }>
+    }
+    const userMessage = body.messages.find(message => message.role === 'user')
+    const payload = JSON.parse(userMessage?.content ?? '{"targets":[]}') as {
+      targets: Array<{ id: string }>
+    }
+    const labels = Object.fromEntries(payload.targets.map(target => [target.id, '测试亲属']))
+    return new Response(JSON.stringify({
+      choices: [{ finish_reason: 'stop', message: { content: JSON.stringify(labels) } }],
+    }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    })
+  }
+  return originalFetch(input, init)
+}
 
 const main = async (): Promise<void> => {
   const { app } = await import('../src/app')
@@ -55,6 +82,18 @@ const main = async (): Promise<void> => {
       { name: '邀请测试家庭', description: '' },
     ), 201)
     const familyId = familyResult.family.id
+    const firstMember = await request<{ memberId: string }>(
+      `/api/families/${familyId}/members`,
+      authorized(ownerToken, 'POST', {
+        name: '成员甲', relation: '爸爸', birthYear: null, gender: 'male',
+        birthdayType: null, birthMonth: null, birthDay: null,
+      }),
+      201,
+    )
+    await request(`/api/families/${familyId}/members`, authorized(ownerToken, 'POST', {
+      name: '成员乙', relation: '妈妈', birthYear: null, gender: 'female',
+      birthdayType: null, birthMonth: null, birthDay: null,
+    }), 201)
     const invitation = await request<{
       invitationId: string
       code: string
@@ -76,6 +115,31 @@ const main = async (): Promise<void> => {
       guestToken,
       'POST',
     ))
+    const unlinkedSnapshot = await request<{
+      members: Array<{ id: string; relation: string }>
+    }>(`/api/families/${familyId}/snapshot`, authorized(guestToken))
+    assert.deepEqual(unlinkedSnapshot.members.map(member => member.relation), ['亲友', '亲友'])
+
+    await request(`/api/families/${familyId}/me`, authorized(guestToken, 'PATCH', {
+      memberId: firstMember.memberId,
+    }), 202)
+    const linkRequests = await request<{ requests: Array<{ id: string }> }>(
+      `/api/families/${familyId}/member-link-requests`,
+      authorized(ownerToken),
+    )
+    assert.equal(linkRequests.requests.length, 1)
+    await request(
+      `/api/families/${familyId}/member-link-requests/${linkRequests.requests[0].id}`,
+      authorized(ownerToken, 'PATCH', { status: 'approved' }),
+    )
+    const linkedSnapshot = await request<{
+      family: { linkedMemberId: string | null }
+      members: Array<{ id: string; relation: string }>
+    }>(`/api/families/${familyId}/snapshot`, authorized(guestToken))
+    assert.equal(linkedSnapshot.family.linkedMemberId, firstMember.memberId)
+    assert.equal(linkedSnapshot.members.find(member => member.id === firstMember.memberId)?.relation, '自己')
+    assert.equal(linkedSnapshot.members.find(member => member.id !== firstMember.memberId)?.relation, '测试亲属')
+
     const previewAfterJoin = await request<{ remainingUses: number }>(
       `/api/invitations/${encodeURIComponent(invitation.code)}/preview`,
     )
@@ -94,10 +158,11 @@ const main = async (): Promise<void> => {
     ), 204)
     await request(`/api/invitations/${encodeURIComponent(invitation.code)}/preview`, {}, 404)
 
-    console.log('✓ 邀请支持免登录预览、加入、剩余名额统计与作废')
+    console.log('✓ 邀请加入使用通用称呼，认领审批后刷新用户视角，并支持名额统计与作废')
   } finally {
     if (server) await new Promise<void>((resolve, reject) => server?.close(error => error ? reject(error) : resolve()))
     db.close()
+    globalThis.fetch = originalFetch
     fs.rmSync(temporaryDirectory, { recursive: true, force: true })
   }
 }
