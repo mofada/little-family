@@ -11,6 +11,10 @@
         <view class="member-name-row">
           <text class="member-name">{{member.name}}</text>
           <text wx:if="{{isMe}}" class="member-me">我</text>
+          <view wx:if="{{isClaimed}}" class="member-resident" aria-label="已认领入驻">
+            <view class="member-resident__dot"></view>
+            <text>已入驻</text>
+          </view>
         </view>
         <text class="member-meta">{{metaLine}}</text>
         <text wx:if="{{member.nickName}}" class="member-nick">「{{member.nickName}}」</text>

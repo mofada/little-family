@@ -12,6 +12,7 @@ export interface FamilyMember {
   birthMonth: number | null;
   birthDay: number | null;
   isLeapMonth?: boolean;
+  isClaimed: boolean;
 }
 
 export interface FamilyStats {

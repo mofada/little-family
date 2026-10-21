@@ -92,6 +92,7 @@ interface MemberRow {
   birth_month: number | null
   birth_day: number | null
   is_leap_month: number
+  is_claimed?: number
   created_at: string
 }
 
@@ -397,9 +398,15 @@ const refreshKinshipLabels = async (
 
 const getSnapshot = async (familyId: string, viewerMemberId?: string | null) => {
   const members = db.prepare(`
-    SELECT id, name, nickname, relation_label, birth_year,
-           gender, birthday_type, birth_month, birth_day, is_leap_month, created_at
-    FROM members WHERE family_id = ?
+    SELECT members.id, members.name, members.nickname, members.relation_label, members.birth_year,
+           members.gender, members.birthday_type, members.birth_month, members.birth_day,
+           members.is_leap_month, members.created_at,
+           EXISTS (
+             SELECT 1 FROM family_users
+             WHERE family_users.family_id = members.family_id
+               AND family_users.linked_member_id = members.id
+           ) AS is_claimed
+    FROM members WHERE members.family_id = ?
   `).all(familyId) as unknown as MemberRow[]
   const relationships = db.prepare(`
     SELECT id, from_member_id, to_member_id, type
@@ -434,6 +441,7 @@ const getSnapshot = async (familyId: string, viewerMemberId?: string | null) => 
         birthMonth: member.birth_month,
         birthDay: member.birth_day,
         isLeapMonth: member.is_leap_month === 1,
+        isClaimed: member.is_claimed === 1,
       }
     }),
     relationships: relationships.map(item => ({

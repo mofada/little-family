@@ -213,9 +213,16 @@
   min-width: 0;
 }
 
+.today__name-row,
+.entry__name-row {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+  min-width: 0;
+}
+
 .today__name {
-  display: block;
-  max-width: 100%;
+  min-width: 0;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
@@ -348,8 +355,7 @@
 }
 
 .entry__name {
-  display: block;
-  max-width: 100%;
+  min-width: 0;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
@@ -357,6 +363,25 @@
   font-size: 28rpx;
   font-weight: 600;
   color: @ink;
+}
+
+.resident-mark {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6rpx;
+  color: #3f6b5c;
+  font-size: 19rpx;
+  font-weight: 600;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+
+.resident-mark__dot {
+  width: 10rpx;
+  height: 10rpx;
+  border-radius: 9999rpx;
+  background: #6b9d8a;
 }
 
 .entry__meta {

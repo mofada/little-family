@@ -68,7 +68,13 @@
             >
               <view class="today__avatar"><text>{{item.avatarText}}</text></view>
               <view class="today__info">
-                <text class="today__name">{{item.name}}</text>
+                <view class="today__name-row">
+                  <text class="today__name">{{item.name}}</text>
+                  <view wx:if="{{item.isClaimed}}" class="resident-mark" aria-label="已认领入驻">
+                    <view class="resident-mark__dot"></view>
+                    <text>已入驻</text>
+                  </view>
+                </view>
                 <text class="today__meta">{{item.todayMeta}}</text>
               </view>
               <text class="today__more">资料 ›</text>
@@ -127,7 +133,13 @@
             <text class="entry__weekday">{{member.nextBirthdayWeekday}}</text>
           </view>
           <view class="entry__info">
-            <text class="entry__name">{{member.name}}</text>
+            <view class="entry__name-row">
+              <text class="entry__name">{{member.name}}</text>
+              <view wx:if="{{member.isClaimed}}" class="resident-mark" aria-label="已认领入驻">
+                <view class="resident-mark__dot"></view>
+                <text>已入驻</text>
+              </view>
+            </view>
             <text class="entry__meta">{{member.relation}} · {{member.birthdayLabel}}</text>
           </view>
           <text class="entry__countdown {{member.isUrgent || member.isBirthday ? 'entry__countdown--soon' : ''}}">{{member.countdownLabel}}</text>
@@ -141,7 +153,7 @@
           >编辑</view>
           <view wx:if="{{member.isLinked}}" class="entry__me">我</view>
           <view
-            wx:else
+            wx:elif="{{!member.isClaimed}}"
             class="print-action entry__act"
             catchtap="setAsMe"
             data-id="{{member.id}}"
@@ -173,7 +185,13 @@
               <text class="entry__weekday">待补</text>
             </view>
             <view class="entry__info">
-              <text class="entry__name">{{item.name}}</text>
+              <view class="entry__name-row">
+                <text class="entry__name">{{item.name}}</text>
+                <view wx:if="{{item.isClaimed}}" class="resident-mark" aria-label="已认领入驻">
+                  <view class="resident-mark__dot"></view>
+                  <text>已入驻</text>
+                </view>
+              </view>
               <text class="entry__meta">{{item.relation || '成员'}} · 还没有记录生日</text>
             </view>
             <view
@@ -186,7 +204,7 @@
             >编辑</view>
             <view wx:if="{{item.isLinked}}" class="entry__me">我</view>
             <view
-              wx:else
+              wx:elif="{{!item.isClaimed}}"
               class="print-action entry__act"
               catchtap="setAsMe"
               data-id="{{item.id}}"

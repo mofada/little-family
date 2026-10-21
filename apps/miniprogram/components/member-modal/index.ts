@@ -18,6 +18,7 @@ interface MemberData {
   birthMonth: number | null
   birthDay: number | null
   isLeapMonth?: boolean
+  isClaimed: boolean
 }
 
 interface RelativeMember {
@@ -51,6 +52,7 @@ Component({
     avatarText: '家',
     isBirthday: false,
     isMe: false,
+    isClaimed: false,
     canEdit: false,
     hasRelatives: false,
     birthdayText: '',
@@ -108,6 +110,7 @@ Component({
           avatarText: member.name.trim().slice(-1) || '家',
           isBirthday: daysUntil === 0,
           isMe,
+          isClaimed: Boolean(member.isClaimed),
           canEdit: role === 'owner' || isMe,
           hasRelatives: parents.length > 0 || spouse !== null || children.length > 0,
           birthdayText,

@@ -25,6 +25,7 @@ interface MemberRow {
   isBirthday: boolean
   isUrgent: boolean
   isLinked: boolean
+  isClaimed: boolean
   canEdit: boolean
   selfActionLabel: string
   birthdayLabel: string
@@ -143,6 +144,7 @@ Component({
             isBirthday: todayIds.has(m.id),
             isUrgent: daysUntil > 0 && daysUntil <= 7,
             isLinked: linkedMemberId === m.id,
+            isClaimed: m.isClaimed,
             canEdit: activeRole === 'owner' || linkedMemberId === m.id,
             selfActionLabel: activeRole === 'owner' || activeRole === 'admin' ? '设为我' : '申请认领',
             birthdayLabel,
