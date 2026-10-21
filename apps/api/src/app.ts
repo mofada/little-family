@@ -17,6 +17,7 @@ import { BIRTHDAY_TEMPLATE } from './birthdayTemplate'
 import { getBeijingClock } from './birthdayClock'
 import { runBirthdayReminderJob } from './birthdayReminders'
 import { generateBirthdayWish, generateKinshipLabels, type KinshipLabelRequest } from './deepseek'
+import { buildBirthdayWishPrompt } from './birthdayWishPrompt'
 
 const now = (): string => new Date().toISOString()
 
@@ -104,25 +105,6 @@ const isBirthdayToday = (member: MemberRow): boolean => {
       && (member.is_leap_month === 1) === clock.lunarLeap
   }
   return false
-}
-
-const buildBirthdayPrompt = (member: MemberRow, relationLabel: string): string => {
-  const age = member.birth_year ? getBeijingClock().year - member.birth_year : null
-  return `请模仿中国家庭微信群生日祝福风格生成文案。
-要求：
-- 温馨自然
-- 不要太正式
-- 适合发亲戚群
-- 带 emoji
-- 可以带微信表情：[蛋糕][庆祝][玫瑰]
-- 不同年龄层语气不同
-
-生日的人：
-姓名：${member.name}${member.nickname ? `（${member.nickname}）` : ''}
-称呼：${relationLabel}
-性别：${member.gender === 'male' ? '男' : '女'}
-年龄：${age !== null ? `${age}岁` : '未知'}
-生日：${member.birthday_type === 'lunar' ? `农历${member.is_leap_month ? '闰' : ''}` : '阳历'}${member.birth_month}月${member.birth_day}日`
 }
 
 interface RelationshipRow {
@@ -976,7 +958,8 @@ app.post('/api/families/:familyId/members/:memberId/birthday-wish', birthdayWish
   `).all(familyId) as unknown as MemberRow[]
   const kinshipLabels = await loadKinshipLabels(familyId, currentUser?.linkedMemberId, members)
   const relationLabel = kinshipLabels.get(memberId) ?? fallbackKinshipLabel(currentUser?.linkedMemberId, member)
-  const wish = await generateBirthdayWish(buildBirthdayPrompt(member, relationLabel))
+  const birthdayWish = buildBirthdayWishPrompt(member, relationLabel, getBeijingClock().year)
+  const wish = await generateBirthdayWish(birthdayWish.prompt, birthdayWish.age)
   response.json({ wish })
 })
 

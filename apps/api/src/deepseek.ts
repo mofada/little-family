@@ -1,5 +1,6 @@
 import { config } from './config'
 import { AppError } from './types'
+import { removeBirthdayWishAge } from './birthdayWishPrompt'
 
 interface DeepSeekResponse {
   choices?: Array<{
@@ -175,18 +176,27 @@ const callDeepSeek = async (
   return content
 }
 
-export const generateBirthdayWish = async (prompt: string): Promise<string> => {
+export const birthdayWishSystemPrompt = [
+  '你擅长写中国家族微信群里热闹、喜庆、有排面的生日祝福。',
+  '输出要像家人会直接发在群里的多行短句：称呼醒目、祝福顺口、emoji 和微信表情丰富。',
+  '可以使用四字吉利话和适度重复，但要按指定排版路线变化组合，不能每次只替换姓名。',
+  '年龄只用于选择合适的语气，最终文案不得暴露年龄或出生年份。严格遵守篇幅、禁用句式和事实边界。',
+  '只输出可以直接发送的祝福正文，保留换行，不要解释。',
+].join('\n')
+
+export const generateBirthdayWish = async (prompt: string, age: number | null): Promise<string> => {
   if (!config.deepseekApiKey) {
     throw new AppError(503, '生日祝福生成服务尚未配置', 'BIRTHDAY_WISH_DISABLED')
   }
 
-  return callDeepSeek(
-    '你擅长写自然、温暖的中文家庭生日祝福。只输出可直接发送的祝福文案，不要解释。',
+  const wish = await callDeepSeek(
+    birthdayWishSystemPrompt,
     prompt,
     300,
     '生日祝福生成失败',
     'BIRTHDAY_WISH_GENERATION_FAILED',
   )
+  return removeBirthdayWishAge(wish, age)
 }
 
 export interface KinshipLabelRequest {

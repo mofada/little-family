@@ -97,18 +97,23 @@ export const getMembersByGeneration = (): Map<number, FamilyMember[]> => {
 export const getFamilyBranches = (): string[] =>
   [...new Set(familyMembers.map((member) => member.familyName))];
 
-export const buildBirthdayPrompt = (member: FamilyMember): string => `请模仿中国家庭微信群生日祝福风格生成文案。
+export const buildBirthdayPrompt = (member: FamilyMember): string => `请写一条可以直接发到家族微信群的生日祝福，风格要热闹、喜庆、有排面，不写成小作文。
+
 要求：
-- 温馨自然，不要太正式
-- 适合发亲戚群，带 emoji
-- 可以带微信表情：[蛋糕][庆祝][玫瑰]
-- 不同年龄层语气不同
+- 使用3—6行短句，开头从“${member.relation || "家人"}”“${member.name}${member.relation || "家人"}”中选更自然的称呼，${member.nickName ? `带上“@${member.nickName}”` : "不要编造@昵称"}；也可以先放花体生日英文
+- 必须写“生日快乐”，蛋糕可以连续放3—6个；整体使用8—16个 emoji 或微信表情
+- 从 [蛋糕][庆祝][礼物][红包][發][福][太阳][烟花][爱心][加油] 中选2—6个，搭配两三组简短吉利话
+- ${calculateAge(member.birthYear) === null
+    ? '不要猜年龄，也不要写“年龄未知”'
+    : `已提供的${calculateAge(member.birthYear)}岁只用于选择合适祝福词，正文不得出现年龄、出生年份或“几岁”`}
+- 不编造@昵称、职业、性格、近况或共同回忆；不解释、不署名
 
 生日的人：
 姓名：${member.name}${member.nickName ? `（${member.nickName}）` : ""}
 称呼：${member.relation || "家人"}
+群内@昵称：${member.nickName || "未记录，不要编造"}
 性别：${member.gender === "male" ? "男" : member.gender === "female" ? "女" : "未知"}
-年龄：${calculateAge(member.birthYear) ?? "未知"}岁
+年龄：${calculateAge(member.birthYear) === null ? "未记录" : `${calculateAge(member.birthYear)}岁`}
 生日：${member.birthdayType && member.birthMonth !== null && member.birthDay !== null
     ? `${member.birthdayType === "lunar" ? `农历${member.isLeapMonth ? "闰" : ""}` : "阳历"}${member.birthMonth}月${member.birthDay}日`
     : "未记录"}`;
