@@ -6,3 +6,14 @@ coverage/
 .env
 .env.*
 !.env.example
+
+# 本地 Codex / Impeccable 工具与缓存
+/.agents/
+/.codex/
+/.impeccable/
+
+# 小程序设计过程产物；保留 design.json 和 surfaces/ 作为长期设计资料
+/apps/miniprogram/.impeccable/critique/
+/apps/miniprogram/.impeccable/mocks/
+/apps/miniprogram/.impeccable/questions/
+/apps/miniprogram/.impeccable/review/
