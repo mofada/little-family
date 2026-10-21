@@ -81,11 +81,9 @@ const callDeepSeek = async (
     thinking: { type: 'disabled' },
     ...(jsonResponse ? { response_format: { type: 'json_object' } } : {}),
   }
-  logDeepSeekInfo('request', {
-    code: errorCode,
-    timeoutMs,
-    body: requestBody,
-  })
+  logDeepSeekInfo('request', config.isProduction
+    ? { code: errorCode, timeoutMs, maxTokens, jsonResponse }
+    : { code: errorCode, timeoutMs, body: requestBody })
 
   let response: globalThis.Response
   try {
@@ -141,12 +139,19 @@ const callDeepSeek = async (
     })
     throw new AppError(502, errorMessage, errorCode)
   }
-  logDeepSeekInfo('response', {
-    code: errorCode,
-    status: response.status,
-    statusText: response.statusText,
-    body: responseText,
-  })
+  logDeepSeekInfo('response', config.isProduction
+    ? {
+        code: errorCode,
+        status: response.status,
+        statusText: response.statusText,
+        responseSummary: summarizeDeepSeekResponse(responseText),
+      }
+    : {
+        code: errorCode,
+        status: response.status,
+        statusText: response.statusText,
+        body: responseText,
+      })
 
   let result: DeepSeekResponse
   try {
@@ -207,22 +212,43 @@ export interface KinshipLabelRequest {
   }>
 }
 
+const generatedLabelGender = (label: string): 'male' | 'female' | 'unknown' => {
+  if (/(母|妈|奶奶|婆|姐|妹|女|妻)$/.test(label)) return 'female'
+  if (/(父|爸|爷爷|公|哥|兄|弟|舅|伯|叔|夫|子|孙)$/.test(label)) return 'male'
+  return 'unknown'
+}
+
+const relationTargetGender = (relation: string | null): 'male' | 'female' | 'unknown' => {
+  if (!relation) return 'unknown'
+  const plainRelation = relation.replace(/（[^）]*）/g, '')
+  const target = plainRelation.split('的').at(-1)
+  if (['爸爸', '儿子', '丈夫'].includes(target ?? '')) return 'male'
+  if (['妈妈', '女儿', '妻子'].includes(target ?? '')) return 'female'
+  return 'unknown'
+}
+
+const isGeneratedKinshipLabelValid = (
+  target: KinshipLabelRequest['targets'][number],
+  label: string,
+): boolean => {
+  if (!target.relation) return label === '亲友'
+  if (/[\/或的]/.test(label)) return false
+  if (label === '亲友') return true
+  const targetGender = relationTargetGender(target.relation)
+  const labelGender = generatedLabelGender(label)
+  return targetGender === 'unknown' || labelGender === 'unknown' || targetGender === labelGender
+}
+
 const KINSHIP_LABEL_TIMEOUT_MS = 120_000
 
 const kinshipSystemPrompt = [
   '你是中文亲属称谓专家。',
-  '输入已经按每位目标成员组装好从当前用户出发的关系链，你只需根据 targets 生成称呼。',
-  'target 只包含 id 和 relation。relation 是可直接阅读的关系链，例如“爸爸的爸爸”或“爸爸的爸爸的儿子（比爸爸年长）”。',
-  '括号内的“比我年长/年幼”或“比某位链上亲属年长/年幼”是后端已计算好的长幼信息，必须据此区分兄弟姐妹、伯父叔父等称呼。',
-  '如果关系链标注“长幼未知”且该称呼必须区分长幼，返回“亲友”。relation 为 null 时也返回“亲友”。',
-  '只返回 JSON 对象，key 是 target id，value 是 viewer 对该 target 的称呼。',
-  '最终回答必须写在 message.content 中，不能只输出推理内容。',
-  '称呼必须使用规范、正式的书面称谓，例如：兄、弟、姐、妹、伯父、叔父、姑母、舅父、舅母、姨母、婶母、堂兄、表姐、连襟、妯娌。',
-  '同辈亲兄弟姐妹必须输出“兄、弟、姐、妹”，不要输出“哥哥、弟弟、姐姐、妹妹”。',
-  '仅直系亲属保留家庭常用称呼：爸爸、妈妈、爷爷、奶奶、外公、外婆。',
-  '表哥、堂哥、表姐、堂姐的子女不能称为弟弟或妹妹，应称表侄、表侄女、堂侄、堂侄女等下一辈称呼。',
-  '不要输出带斜杠、“或”、“的”的不确定或描述性称呼；无法确定时只返回“亲友”。',
-  '不要输出解释、Markdown 或代码块。',
+  '输入 targets，每项只有 id 和从当前用户出发的完整自然语言关系链 relation。',
+  '沿 relation 推导到最后一人；辈分优先，括号中的同辈参照和长幼只用于区分同辈称呼，不能改变辈分。',
+  '使用规范称谓并保留“堂”“表”等关系：亲兄弟姐妹用哥哥、弟弟、姐姐、妹妹；堂表亲仍用堂兄、表弟、表姐等。',
+  '堂表亲的子女属于下一辈，应使用堂侄、表侄、堂侄女、表侄女等称呼。',
+  'relation 为 null，或必要长幼未知、关系无法唯一确定时，返回“亲友”，不要猜测或输出多个称呼。',
+  '只返回 JSON 对象：key 为 id，value 为称呼；不要解释、Markdown、斜杠、“或”或描述性短语。',
 ].join('\n')
 
 const kinshipMaxTokens = (targetCount: number): number =>
@@ -238,8 +264,8 @@ const kinshipBatches = (
   input: KinshipLabelRequest,
 ): KinshipLabelRequest[] => {
   const batches: KinshipLabelRequest[] = []
-  for (let index = 0; index < input.targets.length; index += 1000) {
-    batches.push({ ...input, targets: input.targets.slice(index, index + 1000) })
+  for (let index = 0; index < input.targets.length; index += 4) {
+    batches.push({ ...input, targets: input.targets.slice(index, index + 4) })
   }
   return batches
 }
@@ -279,7 +305,6 @@ export const generateKinshipLabels = async (
   }
 
   const labels = new Map<string, string>()
-
   const batches = kinshipBatches(input)
   for (const [batchIndex, batch] of batches.entries()) {
     const maxTokens = kinshipMaxTokens(batch.targets.length)
@@ -306,7 +331,7 @@ export const generateKinshipLabels = async (
         const value = parsed[target.id]
         if (typeof value !== 'string') return
         const label = sanitizeGeneratedLabel(value)
-        if (!label) return
+        if (!label || !isGeneratedKinshipLabelValid(target, label)) return
         labels.set(target.id, label)
       })
       logDeepSeekInfo('kinship_batch_success', {
@@ -326,13 +351,18 @@ export const generateKinshipLabels = async (
         durationMs: Date.now() - startedAt,
         error: describeError(error),
       })
+      throw error
     }
   }
 
-  if (labels.size === 0) {
+  const missingTargetIds = input.targets
+    .filter(target => !labels.has(target.id))
+    .map(target => target.id)
+  if (missingTargetIds.length > 0) {
     logDeepSeekDiagnostic('kinship_no_valid_labels', {
       code: 'KINSHIP_LABEL_GENERATION_FAILED',
       requestSummary: kinshipRequestSummary(input),
+      missingTargetIdSuffixes: missingTargetIds.map(id => id.slice(-8)),
     })
     throw new AppError(502, '称呼生成失败', 'KINSHIP_LABEL_GENERATION_FAILED')
   }

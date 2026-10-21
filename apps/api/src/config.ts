@@ -7,6 +7,7 @@ const numberFromEnv = (value: string | undefined, fallback: number): number => {
 }
 
 export const config = {
+  isProduction: process.env.NODE_ENV === 'production',
   port: numberFromEnv(process.env.PORT, 3000),
   databasePath: path.resolve(process.cwd(), process.env.DATABASE_PATH ?? './data/little-family.db'),
   wechatAppId: process.env.WECHAT_APP_ID ?? '',

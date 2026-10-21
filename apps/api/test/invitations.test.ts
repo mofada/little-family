@@ -23,9 +23,12 @@ globalThis.fetch = async (input, init): Promise<Response> => {
     }
     const userMessage = body.messages.find(message => message.role === 'user')
     const payload = JSON.parse(userMessage?.content ?? '{"targets":[]}') as {
-      targets: Array<{ id: string }>
+      targets: Array<{ id: string; relation: string | null }>
     }
-    const labels = Object.fromEntries(payload.targets.map(target => [target.id, '测试亲属']))
+    const labels = Object.fromEntries(payload.targets.map(target => [
+      target.id,
+      target.relation ? '测试亲属' : '亲友',
+    ]))
     return new Response(JSON.stringify({
       choices: [{ finish_reason: 'stop', message: { content: JSON.stringify(labels) } }],
     }), {
@@ -138,7 +141,7 @@ const main = async (): Promise<void> => {
     }>(`/api/families/${familyId}/snapshot`, authorized(guestToken))
     assert.equal(linkedSnapshot.family.linkedMemberId, firstMember.memberId)
     assert.equal(linkedSnapshot.members.find(member => member.id === firstMember.memberId)?.relation, '自己')
-    assert.equal(linkedSnapshot.members.find(member => member.id !== firstMember.memberId)?.relation, '测试亲属')
+    assert.equal(linkedSnapshot.members.find(member => member.id !== firstMember.memberId)?.relation, '亲友')
 
     const previewAfterJoin = await request<{ remainingUses: number }>(
       `/api/invitations/${encodeURIComponent(invitation.code)}/preview`,

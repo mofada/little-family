@@ -18,6 +18,11 @@ import { getBeijingClock } from './birthdayClock'
 import { runBirthdayReminderJob } from './birthdayReminders'
 import { generateBirthdayWish, generateKinshipLabels, type KinshipLabelRequest } from './deepseek'
 import { buildBirthdayWishPrompt } from './birthdayWishPrompt'
+import {
+  resolveCommonKinshipLabel,
+  type KinshipAgeComparison,
+  type KinshipRuleStep,
+} from './kinship'
 
 const now = (): string => new Date().toISOString()
 
@@ -209,49 +214,75 @@ const buildKinshipContextPaths = (
   return paths
 }
 
-export const buildKinshipLabelRequest = (
+export const buildKinshipLabelPlan = (
   viewerMemberId: string,
   members: MemberRow[],
   relationships: RelationshipRow[],
-): KinshipLabelRequest => {
+): { request: KinshipLabelRequest; ruleLabels: Map<string, string> } => {
   const viewer = members.find(member => member.id === viewerMemberId)
   if (!viewer) throw new AppError(400, '当前关联成员不存在', 'LINKED_MEMBER_NOT_FOUND')
   const viewerBirthday = memberBirthdayForAi(viewer)
   const contextPaths = buildKinshipContextPaths(viewerMemberId, members, relationships)
 
-  const relationText = (path: AiPathStep[]): string => {
+  const describePath = (path: AiPathStep[]): {
+    relation: string | null
+    ruleLabel: string | null
+  } => {
     let generation = 0
     const previous = [{ generation: 0, label: '我', birthday: viewerBirthday }]
-    return path.map(step => {
+    const plainRelations: string[] = []
+    const ruleSteps: KinshipRuleStep[] = []
+    const relation = path.map(step => {
       if (['爸爸', '妈妈', '父母'].includes(step.relation)) generation -= 1
       if (['儿子', '女儿', '子女'].includes(step.relation)) generation += 1
+      plainRelations.push(step.relation)
       let relation = step.relation
+      let ageComparison: KinshipAgeComparison | undefined
       if (['儿子', '女儿', '子女'].includes(step.relation)) {
         const reference = [...previous].reverse().find(item => item.generation === generation)
         if (reference) {
           const comparison = compareBirthdaysForAi(step.birthday, reference.birthday)
+          ageComparison = comparison
           const comparisonText = comparison === 'older' ? '年长'
             : comparison === 'younger' ? '年幼'
               : comparison === 'same-birthday' ? '同龄'
                 : '长幼未知'
-          relation += `（比${reference.label}${comparisonText}）`
+          relation += `（与${reference.label}同辈，且比${reference.label}${comparisonText}）`
         }
       }
-      previous.push({ generation, label: step.relation, birthday: step.birthday })
+      ruleSteps.push({ relation: step.relation, ageComparison })
+      previous.push({
+        generation,
+        label: plainRelations.join('的'),
+        birthday: step.birthday,
+      })
       return relation
     }).join('的')
+    const ruleLabel = resolveCommonKinshipLabel(ruleSteps)
+    const hasIntermediateSpouse = path.slice(0, -1)
+      .some(step => ['丈夫', '妻子', '配偶'].includes(step.relation))
+    return { relation: hasIntermediateSpouse ? null : relation, ruleLabel }
   }
 
-  return {
-    targets: members.filter(member => member.id !== viewerMemberId).map(member => {
-      const path = contextPaths.get(member.id) ?? null
-      return {
-        id: member.id,
-        relation: path ? relationText(path) : null,
-      }
-    }),
-  }
+  const ruleLabels = new Map<string, string>()
+  const targets = members.filter(member => member.id !== viewerMemberId).map(member => {
+    const path = contextPaths.get(member.id) ?? null
+    if (!path) {
+      ruleLabels.set(member.id, FALLBACK_KINSHIP_LABEL)
+      return { id: member.id, relation: null }
+    }
+    const description = describePath(path)
+    if (description.ruleLabel) ruleLabels.set(member.id, description.ruleLabel)
+    return { id: member.id, relation: description.relation }
+  })
+  return { request: { targets }, ruleLabels }
 }
+
+export const buildKinshipLabelRequest = (
+  viewerMemberId: string,
+  members: MemberRow[],
+  relationships: RelationshipRow[],
+): KinshipLabelRequest => buildKinshipLabelPlan(viewerMemberId, members, relationships).request
 
 const inferGenerations = (
   memberIds: string[],
@@ -361,14 +392,22 @@ const refreshKinshipLabels = async (
   }
   labels.set(viewerMemberId, '自己')
   const targetMembers = members.filter(member => member.id !== viewerMemberId)
-  let generatedLabels = new Map<string, string>()
-  if (targetMembers.length > 0) {
-    generatedLabels = await generateKinshipLabels(buildKinshipLabelRequest(viewerMemberId, members, relationships))
+  const plan = buildKinshipLabelPlan(viewerMemberId, members, relationships)
+  const resolvedLabels = new Map(plan.ruleLabels)
+  const labelSources = new Map<string, 'heuristic' | 'deepseek'>()
+  plan.ruleLabels.forEach((_label, memberId) => labelSources.set(memberId, 'heuristic'))
+  const aiRequest: KinshipLabelRequest = {
+    targets: plan.request.targets.filter(target => !resolvedLabels.has(target.id)),
+  }
+  if (aiRequest.targets.length > 0) {
+    const generatedLabels = await generateKinshipLabels(aiRequest)
+    generatedLabels.forEach((label, memberId) => {
+      resolvedLabels.set(memberId, label)
+      labelSources.set(memberId, 'deepseek')
+    })
   }
 
   const timestamp = now()
-  db.prepare('DELETE FROM kinship_labels WHERE family_id = ? AND from_member_id = ?')
-    .run(familyId, viewerMemberId)
   const upsert = db.prepare(`
     INSERT INTO kinship_labels
       (id, family_id, from_member_id, to_member_id, label, source, created_at, updated_at)
@@ -376,21 +415,25 @@ const refreshKinshipLabels = async (
     ON CONFLICT(family_id, from_member_id, to_member_id)
     DO UPDATE SET label = excluded.label, source = excluded.source, updated_at = excluded.updated_at
   `)
-  targetMembers.forEach(member => {
-    const generated = generatedLabels.get(member.id)
-    const generatedLabel = generated ? sanitizeKinshipLabel(generated) : ''
-    const label = generatedLabel || fallbackKinshipLabel(viewerMemberId, member)
-    labels.set(member.id, label)
-    upsert.run(
-      randomUUID(),
-      familyId,
-      viewerMemberId,
-      member.id,
-      label,
-      generatedLabel ? 'deepseek' : 'heuristic',
-      timestamp,
-      timestamp,
-    )
+  transaction(() => {
+    db.prepare('DELETE FROM kinship_labels WHERE family_id = ? AND from_member_id = ?')
+      .run(familyId, viewerMemberId)
+    targetMembers.forEach(member => {
+      const resolved = resolvedLabels.get(member.id)
+      const resolvedLabel = resolved ? sanitizeKinshipLabel(resolved) : ''
+      const label = resolvedLabel || fallbackKinshipLabel(viewerMemberId, member)
+      labels.set(member.id, label)
+      upsert.run(
+        randomUUID(),
+        familyId,
+        viewerMemberId,
+        member.id,
+        label,
+        labelSources.get(member.id) ?? 'heuristic',
+        timestamp,
+        timestamp,
+      )
+    })
   })
 
   return labels
