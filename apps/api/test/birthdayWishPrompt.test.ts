@@ -52,6 +52,24 @@ test('换一条时会把最近文案作为避重材料', () => {
   assert.match(result.prompt, /必须更换开头方式、主体句式和核心祝福组合/)
 })
 
+test('稳定上下文排在随机组合和避重文案之前以提高缓存命中', () => {
+  const result = buildBirthdayWishPrompt(member, '姐', 2026, 2, [
+    '姐，生日快乐🎂\n平安喜乐，好运常在',
+  ])
+  const fixedRulesIndex = result.prompt.indexOf('固定要求：')
+  const memberIndex = result.prompt.indexOf('生日的人：')
+  const ageToneIndex = result.prompt.indexOf('年龄用词参考：')
+  const directionIndex = result.prompt.indexOf('本次变化组合：')
+  const recentWishesIndex = result.prompt.indexOf('避重要求：')
+  const finalInstructionIndex = result.prompt.indexOf('请严格根据以上要求')
+
+  assert.ok(fixedRulesIndex < memberIndex)
+  assert.ok(memberIndex < ageToneIndex)
+  assert.ok(ageToneIndex < directionIndex)
+  assert.ok(directionIndex < recentWishesIndex)
+  assert.ok(recentWishesIndex < finalInstructionIndex)
+})
+
 test('缺少出生年份时不猜测年龄', () => {
   const result = buildBirthdayWishPrompt({ ...member, birth_year: null }, '姐', 2026, 0)
   assert.equal(result.age, null)

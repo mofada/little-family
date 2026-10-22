@@ -107,25 +107,15 @@ export const buildBirthdayWishPrompt = (
     age,
     prompt: `请写一条可以直接发到家族微信群的生日祝福。目标风格是家族群里热闹、喜庆、有排面的短句祝福，不写成小作文。
 
-本次变化组合：
-${direction}
-年龄用词参考：${describeAgeTone(age)}
-
-硬性要求：
+固定要求：
 - 使用3—6行短句排版；每行简短顺口，可以对仗或押一点节奏，不写解释性长句。
 - 行与行之间只允许一个换行符，不得插入空行，也不要用空格占据单独一行。
-- 称呼从“${relationLabel || '家人'}”“${combinedAddress}”中选择更自然的一个，按本次开头要求放在第一或第二行；可以搭配㊗️，也可以先放花体生日英文。${member.nickname ? `称呼后保留“@${member.nickname}”。` : '昵称未记录时绝不能编造@对象。'}
 - 必须有“生日快乐”，蛋糕可以连续放3—6个，整体使用8—16个装饰符号，允许适度重复以营造家族群气氛。
 - 从 [蛋糕][庆祝][礼物][红包][發][福][太阳][烟花][爱心][加油] 中自然选用2—6个微信表情，可搭配🎂🎁🎊🥳❤️🍻🌈✨等 emoji。
 - 祝福使用两到三组简短吉利话，可以使用四字祝福；同一条里不要把所有好词全部堆上。
-- ${ageInstruction}
 - 不得编造职业、性格、近况、共同回忆或“大忙人”等输入中没有的信息；没有职业信息时不要擅自写“工作顺利”。
 - 不要加解释、引号、署名或 Markdown 代码块。
-
-排版骨架只限定为“称呼、生日快乐、两至四行祝福”，不要套用固定范文或固定词序。
-
-避重要求：
-${avoidRepetition}
+- 排版骨架只限定为“称呼、生日快乐、两至四行祝福”，不要套用固定范文或固定词序。
 
 生日的人：
 姓名：${member.name}${member.nickname ? `（${member.nickname}）` : ''}
@@ -133,7 +123,20 @@ ${avoidRepetition}
 群内@昵称：${mention}
 性别：${member.gender === 'male' ? '男' : member.gender === 'female' ? '女' : '未知'}
 年龄：${age === null ? '未记录' : `${age}岁`}
-生日：${formatBirthday(member)}`,
+生日：${formatBirthday(member)}
+
+成员使用要求：
+- 称呼从“${relationLabel || '家人'}”“${combinedAddress}”中选择更自然的一个，按本次开头要求放在第一或第二行；可以搭配㊗️，也可以先放花体生日英文。${member.nickname ? `称呼后保留“@${member.nickname}”。` : '昵称未记录时绝不能编造@对象。'}
+- ${ageInstruction}
+年龄用词参考：${describeAgeTone(age)}
+
+本次变化组合：
+${direction}
+
+避重要求：
+${avoidRepetition}
+
+请严格根据以上要求，只输出本次可以直接发送的祝福正文。`,
   }
 }
 
