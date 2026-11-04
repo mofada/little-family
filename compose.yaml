@@ -1,23 +1,36 @@
+name: little-family
+
 services:
   api:
     build:
-      context: .
+      context: ./source
       dockerfile: apps/api/Dockerfile
+
     restart: unless-stopped
+
     ports:
       - "127.0.0.1:3002:3000"
+
+    env_file:
+      - ./api.env
+
     environment:
       NODE_ENV: production
-      PORT: 3000
+      PORT: "3000"
       DATABASE_PATH: /repo/apps/api/data/little-family.db
-      WECHAT_APP_ID: ${WECHAT_APP_ID}
-      WECHAT_APP_SECRET: ${WECHAT_APP_SECRET}
-      WECHAT_OPEN_APP_ID: ${WECHAT_OPEN_APP_ID:-}
-      WECHAT_OPEN_APP_SECRET: ${WECHAT_OPEN_APP_SECRET:-}
-      WECHAT_OPEN_REDIRECT_URI: ${WECHAT_OPEN_REDIRECT_URI:-}
-      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
-      DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek-v4-flash}
-      SESSION_DAYS: 30
+      SESSION_DAYS: "30"
       ALLOW_DEV_LOGIN: "false"
+
     volumes:
       - ./data:/repo/apps/api/data
+
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
