@@ -1,9 +1,17 @@
+
 **/node_modules
 **/dist
-**/data
+
+# 排除数据库及持久化数据
+/data
+/apps/api/data
+
+# 排除环境变量
 **/.env
 **/.env.*
 !**/.env.example
+
+# 排除其他文件
 .git
 .idea
 npm-debug.log
