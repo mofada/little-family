@@ -3,7 +3,7 @@ FROM node:22-bookworm-slim AS builder
 
 WORKDIR /app
 
-COPY . .
+COPY ../.. .
 
 RUN npm ci
 RUN npm run build:web

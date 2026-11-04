@@ -49,7 +49,7 @@ services:
   web:
     build:
       context: ./source
-      dockerfile: ../web.Dockerfile
+      dockerfile: ./source/apps/web/Dockerfile
 
     restart: unless-stopped
 
