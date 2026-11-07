@@ -204,30 +204,28 @@ pm2 save
 
 如果 Gitea 已占用 3000，API 的 `.env` 使用 `PORT=3002`，Caddy 代理到 `127.0.0.1:3002`。
 
-## Docker 部署
+## Docker 部署（公共 Gateway 模式）
 
-根目录 `compose.yaml` 使用 `apps/api/Dockerfile` 构建 API，并把宿主机 `127.0.0.1:3002` 映射到容器 3000。
+生产目录采用 `/opt/little-family/source`（仓库）、`/opt/little-family/compose.yaml`（运行配置）、`/opt/little-family/caddy/Caddyfile`（内部 Caddy）、`/opt/little-family/api.env`（仅服务器持有的密钥）和 `/opt/little-family/data`（持久化 SQLite）。仓库 `compose.yaml` 中的 `./source` 是相对于**生产根目录**，不能直接在 Git 仓库源码目录执行 `docker compose up`。
 
-在仓库根目录创建只存在于服务器上的 `.env`：
+当前网络隔离规则：
 
-```dotenv
-WECHAT_APP_ID=你的小程序AppID
-WECHAT_APP_SECRET=你的小程序AppSecret
-WECHAT_OPEN_APP_ID=微信开放平台网站应用AppID
-WECHAT_OPEN_APP_SECRET=微信开放平台网站应用AppSecret
-WECHAT_OPEN_REDIRECT_URI=https://你的Web域名/wechat-callback
-DEEPSEEK_API_KEY=你的DeepSeek API Key
-DEEPSEEK_MODEL=deepseek-v4-flash
-```
+- `api` **只加入项目默认网络**，使用唯一别名 `little-family-api`；保持 `127.0.0.1:3002:3000` 的本机调试入口及原有 SQLite 数据挂载。
+- `web` 同时加入项目默认网络和 `gateway-net`，在公共网络使用别名 `little-family-web`。其 Caddyfile 将 `/api`、`/api/*`、`/health` 转发给 `little-family-api:3000`，其他路径继续由 React SPA 提供。
+- `/opt/gateway/Caddyfile` 中的 Family 站点使用 `family.mofada.cn { reverse_proxy little-family-web:80 }`；**不要**再从 Gateway 直连 Family API，也不要让多个项目的 `api` 同时加入共享网络。
 
-启动：
+已有线上环境迁移时，**必须按照 [Gateway 网络隔离迁移指南](docs/gateway-network-migration.md) 的顺序操作**：先更新 Web，再切换公共 Gateway，最后隔离 API 和恢复正式 Caddy 配置。不要直接一次性 `docker compose up -d`，否则旧 Gateway 可能暂时无法连接 API。
+
+只在服务器中保管 `api.env`，包括 `WECHAT_APP_ID`、`WECHAT_APP_SECRET`、网站应用密钥和 `DEEPSEEK_API_KEY`；禁止提交到 GitHub，迁移时也不要覆盖。服务器检查：
 
 ```bash
-docker compose up -d --build
-curl http://127.0.0.1:3002/health
+cd /opt/little-family
+sudo docker compose config --quiet
+sudo docker compose ps
+curl -fsS https://family.mofada.cn/health
 ```
 
-SQLite 保存在仓库根目录的 `data/little-family.db`（服务器上通常为 `/home/ubuntu/little-family/data/little-family.db`）。`data/` 已被 Git 忽略。PM2 和 Docker 是两种部署方式，不要同时启动同一套 API。
+SQLite 数据保存在 `/opt/little-family/data/little-family.db`，挂载为容器中的 `/repo/apps/api/data/little-family.db`。`data/` 不属于代码发布内容，不能删除或使用 `docker compose down -v`。PM2 和 Docker 不要同时启动同一个数据库的 API。
 
 ## Web 端
 
