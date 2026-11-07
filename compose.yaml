@@ -25,9 +25,12 @@ services:
     volumes:
       - ./data:/repo/apps/api/data
 
+    # Keep API private to the project. Sharing the generic "api" service
+    # name on gateway-net can route another project's requests here.
     networks:
-      - default
-      - gateway
+      default:
+        aliases:
+          - little-family-api
 
     healthcheck:
       test:
@@ -56,8 +59,12 @@ services:
     volumes:
       - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
 
+    # The public Gateway talks only to web; web reaches API privately.
     networks:
-      - gateway
+      default: {}
+      gateway:
+        aliases:
+          - little-family-web
 
     depends_on:
       api:
