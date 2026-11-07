@@ -1,9 +1,24 @@
+# Public HTTPS is terminated by /opt/gateway. This service listens on HTTP only.
 :80 {
     encode zstd gzip
 
-    root * /srv
+    # Keep /api, /api/* and /health paths unchanged when proxying to Express.
+    # Use a project-specific alias instead of "api": web joins two networks.
+    @backend {
+        path /api /api/* /health
+    }
+    handle @backend {
+        reverse_proxy little-family-api:3000 {
+            # Only the public Gateway should be able to access this internal web.
+            # Keep the original client IP for Express rate limiting (trust proxy = 1).
+            header_up X-Forwarded-For {http.request.header.X-Forwarded-For}
+            header_up X-Forwarded-Proto https
+        }
+    }
 
-    try_files {path} /index.html
-
-    file_server
+    handle {
+        root * /srv
+        try_files {path} /index.html
+        file_server
+    }
 }
